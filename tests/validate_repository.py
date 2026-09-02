@@ -51,6 +51,36 @@ for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):
     if upstream_pref not in {"mixer_port", "learned_blend", "triplets_backup_path"}:
         fail(f"settings page duplicates upstream preference: {upstream_pref}")
 
+settings_source = (PLUGIN / "Settings.pm").read_text(encoding="utf-8")
+if "protectName('BLISSMIXEREXT')" not in settings_source:
+    fail("settings menu name must use the BLISSMIXEREXT localization token")
+if "$paramRef->{host}" not in settings_source:
+    fail("settings JSON-RPC URL must prefer the browser-facing LMS request host")
+
+strings_path = PLUGIN / "strings.txt"
+strings_source = strings_path.read_text(encoding="utf-8")
+string_tokens: set[str] = set()
+for line_number, line in enumerate(strings_source.splitlines(), start=1):
+    if not line:
+        continue
+    if line[0].isspace():
+        if not re.fullmatch(r"\t[A-Z]{2}\t\S.*", line):
+            fail(f"strings.txt line {line_number} is not tab-delimited LMS string data")
+        continue
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", line):
+        fail(f"strings.txt line {line_number} is not a valid string token")
+    string_tokens.add(line)
+
+referenced_tokens = {
+    manifest.findtext("name"),
+    manifest.findtext("description"),
+    *re.findall(r'"(BLISSMIXEREXT(?:_[A-Z0-9_]+)?)"\s*\|\s*string', settings),
+    *re.findall(r'(?:title|desc)="(BLISSMIXEREXT(?:_[A-Z0-9_]+)?)"', settings),
+}
+for token in referenced_tokens:
+    if token and token not in string_tokens:
+        fail(f"missing localized string token: {token}")
+
 release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 for requirement in (
     "chrober/bliss-mixer",

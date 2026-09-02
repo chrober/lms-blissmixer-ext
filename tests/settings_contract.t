@@ -1,0 +1,94 @@
+use strict;
+use warnings;
+use FindBin;
+use Test::More;
+
+BEGIN {
+    package Slim::Web::Settings;
+    sub handler { return $_[2] }
+    $INC{'Slim/Web/Settings.pm'} = __FILE__;
+
+    package Slim::Web::HTTP::CSRF;
+    sub protectName { return $_[1] }
+    sub protectURI { return $_[1] }
+    $INC{'Slim/Web/HTTP/CSRF.pm'} = __FILE__;
+
+    package TestSettingsPrefs;
+    our %values = (
+        'plugin.blissmixerext' => {mixer_port => 12001},
+        'plugin.blissmixer' => {mixer_port => 12000},
+        server => {httpport => 9000},
+    );
+    sub get { return $values{$_[0]->{name}}{$_[1]} }
+
+    package Slim::Utils::Prefs;
+    sub preferences { return bless {name => $_[0]}, 'TestSettingsPrefs' }
+    sub dir { return '/missing-test-prefs' }
+    sub import {
+        no strict 'refs';
+        *{caller() . '::preferences'} = \&preferences;
+    }
+    $INC{'Slim/Utils/Prefs.pm'} = __FILE__;
+
+    package Slim::Utils::Misc;
+    sub findbin { return '/test/bliss-learner-ext' }
+    $INC{'Slim/Utils/Misc.pm'} = __FILE__;
+
+    package Slim::Utils::Network;
+    sub serverAddr { return '127.0.0.1' }
+    $INC{'Slim/Utils/Network.pm'} = __FILE__;
+
+    package Slim::Utils::OSDetect;
+    sub dirsFor { return '/missing-test-prefs' }
+    $INC{'Slim/Utils/OSDetect.pm'} = __FILE__;
+
+    package Slim::Utils::PluginManager;
+    sub dataForPlugin { return {version => '0.10.0'} }
+    $INC{'Slim/Utils/PluginManager.pm'} = __FILE__;
+
+    package Slim::Utils::Strings;
+    sub string { return "localized:$_[0]" }
+    sub import {
+        no strict 'refs';
+        *{caller() . '::string'} = \&string;
+    }
+    $INC{'Slim/Utils/Strings.pm'} = __FILE__;
+
+    package Slim::Utils::Versions;
+    sub compareVersions { return 0 }
+    $INC{'Slim/Utils/Versions.pm'} = __FILE__;
+}
+
+use lib "$FindBin::Bin/..";
+require Plugins::BlissMixerExt::Settings;
+
+is(Plugins::BlissMixerExt::Settings->name(), 'BLISSMIXEREXT',
+    'settings menu uses the catalog-backed plugin name token');
+is(
+    Plugins::BlissMixerExt::Settings->page(),
+    'plugins/BlissMixerExt/settings/blissmixerext.html',
+    'settings page keeps the sidecar route',
+);
+
+my %request_host = (host => '192.168.1.111:9000');
+Plugins::BlissMixerExt::Settings->beforeRender(\%request_host);
+is(
+    $request_host{jsonrpc_url},
+    'http://192.168.1.111:9000/jsonrpc.js',
+    'JSON-RPC uses the browser-facing LMS request host',
+);
+ok($request_host{upstream_compatible}, 'compatible upstream is reported');
+ok(!$request_host{port_conflict}, 'distinct mixer ports are reported as safe');
+ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
+is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
+    'dynamic JavaScript messages are localized before rendering');
+
+my %fallback_host;
+Plugins::BlissMixerExt::Settings->beforeRender(\%fallback_host);
+is(
+    $fallback_host{jsonrpc_url},
+    'http://127.0.0.1:9000/jsonrpc.js',
+    'server address is used only when the request has no host',
+);
+
+done_testing();

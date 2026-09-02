@@ -23,7 +23,7 @@ my $baseprefs = preferences('plugin.blissmixer');
 my $serverprefs = preferences('server');
 
 sub name {
-    return Slim::Web::HTTP::CSRF->protectName('BlissMixerExt');
+    return Slim::Web::HTTP::CSRF->protectName('BLISSMIXEREXT');
 }
 
 sub page {
@@ -39,7 +39,8 @@ sub beforeRender {
 
     my $dbDir = Slim::Utils::Prefs::dir() || Slim::Utils::OSDetect::dirsFor('prefs');
     my $manifest = Slim::Utils::PluginManager->dataForPlugin('Plugins::BlissMixer::Plugin');
-    my $host = Slim::Utils::Network::serverAddr() . ':' . ($serverprefs->get('httpport') || 9000);
+    my $host = $paramRef->{host}
+        || (Slim::Utils::Network::serverAddr() . ':' . ($serverprefs->get('httpport') || 9000));
 
     $paramRef->{jsonrpc_url} = "http://${host}/jsonrpc.js";
     $paramRef->{survey_url} = '/blissmixerext/survey.html';

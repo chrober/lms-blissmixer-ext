@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.1 - 2026-09-02
+
+- Fix the LMS string catalog delimiters so the plugin name and settings labels
+  are localized instead of appearing blank or as raw string IDs.
+- Validate the string catalog format and every settings-page localization token
+  in CI.
+
+## 0.1.0 - 2026-09-02
 
 - Create a standalone `BlissMixerExt` plugin identity.
 - Add the independent **Bliss (Ext)** Don't Stop the Music provider.

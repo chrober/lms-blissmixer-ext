@@ -1,107 +1,107 @@
 BLISSMIXEREXT
-    EN  Bliss Mixer Experimental
+	EN	Bliss Mixer Experimental
 
 BLISSMIXEREXT_DESC
-    EN  Experimental companion features for Bliss Mixer
+	EN	Experimental companion features for Bliss Mixer
 
 BLISSMIXEREXT_DSTM
-    EN  Bliss (Ext)
+	EN	Bliss (Ext)
 
 BLISSMIXEREXT_STATUS
-    EN  Companion status
+	EN	Companion status
 
 BLISSMIXEREXT_UPSTREAM_OK
-    EN  Compatible upstream BlissMixer version:
+	EN	Compatible upstream BlissMixer version:
 
 BLISSMIXEREXT_UPSTREAM_MISSING
-    EN  BlissMixerExt requires an enabled upstream BlissMixer 0.10.0 or newer. Detected version:
+	EN	BlissMixerExt requires an enabled upstream BlissMixer 0.10.0 or newer. Detected version:
 
 BLISSMIXEREXT_DATABASE_OK
-    EN  The upstream analysis database is available.
+	EN	The upstream analysis database is available.
 
 BLISSMIXEREXT_DATABASE_MISSING
-    EN  No bliss.db was found. Run analysis from the upstream BlissMixer settings first.
+	EN	No bliss.db was found. Run analysis from the upstream BlissMixer settings first.
 
 BLISSMIXEREXT_SETTINGS_NOTE
-    EN  BlissMixerExt uses the mixer, filter, seed, genre, and Last.fm settings from upstream BlissMixer. Only experimental settings are shown here.
+	EN	BlissMixerExt uses the mixer, filter, seed, genre, and Last.fm settings from upstream BlissMixer. Only experimental settings are shown here.
 
 BLISSMIXEREXT_MIXER_PORT
-    EN  Experimental mixer port
+	EN	Experimental mixer port
 
 BLISSMIXEREXT_MIXER_PORT_DESC
-    EN  Loopback port used only by bliss-mixer-ext. It must differ from the upstream BlissMixer port. Default: 12001.
+	EN	Loopback port used only by bliss-mixer-ext. It must differ from the upstream BlissMixer port. Default: 12001.
 
 BLISSMIXEREXT_PORT_CONFLICT
-    EN  This port is also configured for upstream BlissMixer. Choose a different port before using Bliss (Ext).
+	EN	This port is also configured for upstream BlissMixer. Choose a different port before using Bliss (Ext).
 
 BLISSMIXEREXT_LEARNED_BLEND
-    EN  Learned matrix influence
+	EN	Learned matrix influence
 
 BLISSMIXEREXT_LEARNED_BLEND_DESC
-    EN  For multiple adaptive-weighting seeds, controls how strongly the learned matrix influences similarity. 0 is variance only; 100 is learned matrix only. A single seed uses the learned matrix directly.
+	EN	For multiple adaptive-weighting seeds, controls how strongly the learned matrix influences similarity. 0 is variance only; 100 is learned matrix only. A single seed uses the learned matrix directly.
 
 BLISSMIXEREXT_LEARNING
-    EN  Metric learning
+	EN	Metric learning
 
 BLISSMIXEREXT_LEARNING_NOTE
-    EN  Complete similarity surveys, then train a personal distance matrix. The previous matrix remains active if an experimental training run fails.
+	EN	Complete similarity surveys, then train a personal distance matrix. The previous matrix remains active if an experimental training run fails.
 
 BLISSMIXEREXT_LEARNER_NOT_FOUND
-    EN  The bliss-learner-ext executable was not found.
+	EN	The bliss-learner-ext executable was not found.
 
 BLISSMIXEREXT_OPEN_SURVEY
-    EN  Open Similarity Survey
+	EN	Open Similarity Survey
 
 BLISSMIXEREXT_TRIPLETS
-    EN  Training triplets:
+	EN	Training triplets:
 
 BLISSMIXEREXT_MATRIX
-    EN  Learned matrix:
+	EN	Learned matrix:
 
 BLISSMIXEREXT_MATRIX_AVAILABLE
-    EN  Available
+	EN	Available
 
 BLISSMIXEREXT_MATRIX_MISSING
-    EN  Not yet generated
+	EN	Not yet generated
 
 BLISSMIXEREXT_RUN_LEARNING
-    EN  Run Learning
+	EN	Run Learning
 
 BLISSMIXEREXT_STOP_LEARNING
-    EN  Stop Learning
+	EN	Stop Learning
 
 BLISSMIXEREXT_CLEAR_TRAINING
-    EN  Clear Training Data
+	EN	Clear Training Data
 
 BLISSMIXEREXT_BACKUP_PATH
-    EN  Training data backup folder
+	EN	Training data backup folder
 
 BLISSMIXEREXT_BACKUP_PATH_DESC
-    EN  Folder where timestamped backup zip files are written. Save this setting before creating a backup.
+	EN	Folder where timestamped backup zip files are written. Save this setting before creating a backup.
 
 BLISSMIXEREXT_BACKUP_NOW
-    EN  Backup now
+	EN	Backup now
 
 BLISSMIXEREXT_BACKUP_SUCCESS
-    EN  Backup created.
+	EN	Backup created.
 
 BLISSMIXEREXT_BACKUP_FAILED
-    EN  Backup failed.
+	EN	Backup failed.
 
 BLISSMIXEREXT_RESTORE_PATH
-    EN  Restore from backup
+	EN	Restore from backup
 
 BLISSMIXEREXT_RESTORE_PATH_DESC
-    EN  Full path to a BlissMixerExt training-data backup zip.
+	EN	Full path to a BlissMixerExt training-data backup zip.
 
 BLISSMIXEREXT_RESTORE
-    EN  Restore
+	EN	Restore
 
 BLISSMIXEREXT_RESTORE_IN_PROGRESS
-    EN  Restoring backup...
+	EN	Restoring backup...
 
 BLISSMIXEREXT_RESTORE_SUCCESS
-    EN  Training data restored successfully.
+	EN	Training data restored successfully.
 
 BLISSMIXEREXT_RESTORE_FAILED
-    EN  Restore failed.
+	EN	Restore failed.
