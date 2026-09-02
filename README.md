@@ -57,8 +57,9 @@ creates separate Linux, macOS, and Windows plugin packages. It publishes those
 packages and their SHA-1/SHA-256 files as a GitHub Release, then updates the
 three platform entries in `chrober/lms-plugins`.
 
-The feed update uses the repository secret `LMS_PLUGINS_TOKEN` (the legacy name
-`MS_PLUGINS_TOKEN` is also accepted) with contents-write access to
+Native release downloads and the feed update use the repository secret
+`LMS_PLUGINS_TOKEN` (the legacy name `MS_PLUGINS_TOKEN` is also accepted) with
+read access to the native repositories and contents-write access to
 `chrober/lms-plugins`. A manual run with `dry_run=true` builds inspectable
 workflow artifacts without publishing or changing the feed.
 

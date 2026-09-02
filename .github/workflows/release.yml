@@ -123,7 +123,7 @@ jobs:
 
       - name: Download native release assets
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LMS_PLUGINS_TOKEN || secrets.MS_PLUGINS_TOKEN || github.token }}
           MIXER_RELEASE: ${{ steps.meta.outputs.mixer_release }}
           LEARNER_RELEASE: ${{ steps.meta.outputs.learner_release }}
         run: |
