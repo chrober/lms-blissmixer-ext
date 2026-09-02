@@ -1,0 +1,58 @@
+# Bliss Mixer Experimental
+
+BlissMixerExt is an independent experimental companion plugin for
+[Lyrion Media Server](https://lyrion.org/). It requires the upstream
+[Bliss Mixer](https://github.com/CDrummond/lms-blissmixer) plugin and adds a
+separate **Bliss (Ext)** provider to Don't Stop the Music.
+
+BlissMixerExt does not replace or modify the installed Bliss Mixer plugin. It
+exists as a staging channel where early adopters can test features before they
+are proposed for upstream Bliss Mixer.
+
+## Responsibilities
+
+- Upstream Bliss Mixer analyses the music library and owns `bliss.db`.
+- BlissMixerExt reads that database and the upstream mix preferences.
+- BlissMixerExt owns its mixer and learner processes, experimental preferences,
+  survey data, and learned similarity matrix.
+- The standard **Bliss** and experimental **Bliss (Ext)** DSTM providers can be
+  installed and selected side by side.
+
+BlissMixerExt currently requires Bliss Mixer 0.10.0 or newer and LMS 9.0 or
+newer.
+
+## Installation
+
+Release packages include platform-specific `bliss-mixer-ext` and
+`bliss-learner-ext` executables. Install the appropriate release through the LMS
+plugin manager or extract it into the LMS plugins directory, then restart LMS.
+
+For development, place or symlink the `BlissMixerExt` directory in the LMS
+plugins directory and run:
+
+```text
+python download-binaries.py
+```
+
+Enable both Bliss Mixer and Bliss Mixer Experimental. Run library analysis from
+the upstream Bliss Mixer settings, configure experimental options on the
+BlissMixerExt settings page, and select **Bliss (Ext)** under Don't Stop the
+Music.
+
+## Compatibility and isolation
+
+The sidecar deliberately does not register an analyser, importer, Bliss Mixer
+URL protocol, or replacement context-menu handlers. Its mixer listens only on a
+separate configurable loopback port (default `12001`). It checks whether the
+upstream analyser is active and reloads its mixer when `bliss.db` changes.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the staging and migration model.
+
+## Attribution and licence
+
+This project contains code adapted from Craig Drummond's GPLv3-licensed
+[lms-blissmixer](https://github.com/CDrummond/lms-blissmixer). The metric
+learning work is based on `bliss-metric-learning` by Polochon-street.
+
+BlissMixerExt is distributed under the GNU General Public License v3. See
+[LICENSE](LICENSE).

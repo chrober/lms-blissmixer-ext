@@ -1,0 +1,9 @@
+* text=auto
+*.html text eol=lf
+*.md text eol=lf
+*.pm text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.png binary

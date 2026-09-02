@@ -1,0 +1,507 @@
+package Plugins::BlissMixerExt::Survey;
+
+#
+# LMS Bliss Mixer - Metric Learning Survey
+#
+# Based on bliss-metric-learning by Polochon-street
+# Adapted for LMS/BlissMixerExt by chrober
+# Sidecar adaptations (c) 2026 Christoph O'Bermair
+#
+# Licence: GPL v3
+#
+
+use strict;
+
+use DBI;
+use File::Basename;
+use File::Copy qw(move);
+use File::Slurp qw(read_file write_file);
+use File::Spec;
+use Archive::Zip qw(:ERROR_CODES);
+use HTTP::Status qw(RC_NOT_FOUND RC_OK RC_BAD_REQUEST RC_INTERNAL_SERVER_ERROR);
+use JSON::XS qw(encode_json decode_json);
+use Scalar::Util qw(blessed);
+use Time::HiRes ();
+
+use Slim::Utils::Log;
+use Slim::Utils::Misc;
+use Slim::Utils::Prefs;
+
+my $log = logger('plugin.blissmixerext');
+my $prefs = preferences('plugin.blissmixerext');
+
+my $SURVEY_PAGE_RE = qr{blissmixerext/survey\.html}i;
+my $SURVEY_API_RE  = qr{blissmixerext/survey-api}i;
+
+my $dbPath;
+my $matrixPath;
+my $tripletsPath;
+my $learningOutputPath;
+
+# bliss-learner binary (discovered via findbin)
+my $learnerBinary;
+
+# Learning process state
+my $learner;
+my $lastLearnerMsg = "";
+my $learningStartTime = 0;
+my $learningEndTime = 0;
+my $learnerFailed = 0;
+
+use constant LEARNER_FINISHED_MSG => "FINISHED";
+use constant CHECK_LEARNER_TIME => 2;
+
+sub init {
+    $dbPath = shift;
+    $matrixPath = shift;
+    $tripletsPath = shift;
+    $learningOutputPath = $matrixPath . '.new';
+
+    # Discover bliss-learner binary (same pattern as Analyser.pm)
+    $learnerBinary = Slim::Utils::Misc::findbin('bliss-learner-ext');
+    main::INFOLOG && $log->info("Learner: ${learnerBinary}") if $learnerBinary;
+
+    Slim::Web::Pages->addRawFunction($SURVEY_PAGE_RE, \&_surveyPageHandler);
+    Slim::Web::Pages->addRawFunction($SURVEY_API_RE, \&_surveyApiHandler);
+    main::INFOLOG && $log->info("Survey handlers registered");
+}
+
+sub matrixPath {
+    return $matrixPath;
+}
+
+sub shutdown {
+    _stopLearning();
+}
+
+sub cliCommand {
+    my $request = shift;
+    my $act = $request->getParam('act');
+
+    if ($act eq 'status') {
+        my $count = _countTriplets();
+        my $matrixExists = (-e $matrixPath) ? 1 : 0;
+        my $running = ($learner && $learner->alive) ? 1 : 0;
+        # The Ext learner is monitored locally instead of posting progress to
+        # the upstream plugin's hard-coded CLI endpoint.
+        if (!$running && $learner && $learningEndTime == 0) {
+            _checkLearner();
+        }
+        $request->addResult("triplets", $count);
+        $request->addResult("matrix_exists", $matrixExists);
+        $request->addResult("learning", $running);
+        if ($running || $lastLearnerMsg) {
+            $request->addResult("msg", $lastLearnerMsg || 'Learning in progress');
+        }
+        if ($learnerFailed) {
+            $request->addResult("failed", 1);
+        }
+        if ($learningStartTime > 0) {
+            $request->addResult("start", $learningStartTime);
+            if ($running) {
+                $request->addResult("duration", time() - $learningStartTime);
+            } elsif ($learningEndTime > $learningStartTime) {
+                $request->addResult("duration", $learningEndTime - $learningStartTime);
+            }
+        }
+        if (!$learnerBinary) {
+            $request->addResult("no_learner_binary", 1);
+        }
+        $request->setStatusDone();
+    } elsif ($act eq 'update') {
+        # Called by bliss-learner binary via JSON-RPC push notifications
+        $lastLearnerMsg = $request->getParam('msg');
+        main::DEBUGLOG && $log->debug("Survey learner update: $lastLearnerMsg");
+        if ($lastLearnerMsg eq LEARNER_FINISHED_MSG) {
+            _learningEnded();
+        }
+        $request->setStatusDone();
+    } elsif ($act eq 'run-learning') {
+        my $msg = _startLearning();
+        $lastLearnerMsg = $msg;
+        $request->addResult("msg", $msg);
+        $request->setStatusDone();
+    } elsif ($act eq 'stop-learning') {
+        _stopLearning();
+        $lastLearnerMsg = 'Learning stopped';
+        $request->addResult("msg", "stopped");
+        $request->setStatusDone();
+    } elsif ($act eq 'clear-training-data') {
+        _clearTrainingData();
+        $request->addResult("msg", "cleared");
+        $request->setStatusDone();
+    } elsif ($act eq 'backup') {
+        my ($ok, $msg) = _backupTriplets();
+        if ($ok) {
+            $request->addResult("ok", 1);
+        } else {
+            $request->addResult("msg", $msg || "Backup failed - check server log");
+        }
+        $request->setStatusDone();
+    } elsif ($act eq 'restore-backup') {
+        my $zipPath = $request->getParam('path');
+        unless ($zipPath) {
+            $request->setStatusBadParams();
+            return;
+        }
+        my $err = _restoreBackup($zipPath);
+        if ($err) {
+            $request->addResult("msg", $err);
+        } else {
+            $request->addResult("ok", 1);
+        }
+        $request->setStatusDone();
+    } else {
+        $request->setStatusBadParams();
+    }
+}
+
+# --- HTTP Handlers ---
+
+sub _surveyPageHandler {
+    my ($httpClient, $response) = @_;
+    return unless $httpClient->connected;
+
+    my $htmlFile = dirname(__FILE__) . "/HTML/EN/plugins/BlissMixerExt/survey.html";
+    my $html = "";
+    if (open(my $fh, '<', $htmlFile)) {
+        local $/;
+        $html = <$fh>;
+        close($fh);
+    } else {
+        $html = "<html><body><h1>Error</h1><p>Could not load survey page.</p></body></html>";
+        $log->error("Could not open survey page: $htmlFile");
+    }
+
+    $response->code(RC_OK);
+    $response->content_type('text/html; charset=utf-8');
+    $response->header('Connection' => 'close');
+    $response->content($html);
+    $httpClient->send_response($response);
+    Slim::Web::HTTP::closeHTTPSocket($httpClient);
+}
+
+sub _surveyApiHandler {
+    my ($httpClient, $response) = @_;
+    return unless $httpClient->connected;
+
+    my $request = $response->request;
+    my $method = $request->method;
+    my $uri = $request->uri;
+
+    if ($method eq 'GET') {
+        my ($action) = ($uri =~ /action=(\w+)/);
+        $action ||= '';
+
+        if ($action eq 'songs') {
+            _handleGetSongs($httpClient, $response);
+        } elsif ($action eq 'status') {
+            _handleGetStatus($httpClient, $response);
+        } else {
+            _sendJson($httpClient, $response, RC_BAD_REQUEST, {error => "Unknown action: $action"});
+        }
+    } elsif ($method eq 'POST') {
+        _handlePostTriplet($httpClient, $response, $request);
+    } else {
+        _sendJson($httpClient, $response, RC_BAD_REQUEST, {error => "Unsupported method"});
+    }
+}
+
+sub _handleGetSongs {
+    my ($httpClient, $response) = @_;
+    my @songs = ();
+    my $mediaDirs = Slim::Utils::Misc::getMediaDirs('audio');
+
+    if (!$dbPath || !-e $dbPath) {
+        _sendJson($httpClient, $response, RC_NOT_FOUND,
+            {error => 'The upstream BlissMixer analysis database was not found'});
+        return;
+    }
+
+    eval {
+        my $dbh = DBI->connect("dbi:SQLite:dbname=${dbPath}", '', '', { RaiseError => 1, sqlite_unicode => 1 });
+        # Fetch more than 3 in case some don't resolve to LMS tracks
+        my $sth = $dbh->prepare("SELECT rowid, File, Title, Artist, Album FROM TracksV2 WHERE Ignore IS NOT 1 ORDER BY RANDOM() LIMIT 15");
+        $sth->execute();
+        while (my @row = $sth->fetchrow_array) {
+            last if scalar(@songs) >= 3;
+            my ($rowid, $file, $title, $artist, $album) = @row;
+            my $trackObj = Plugins::BlissMixerExt::Plugin::_pathToTrack($mediaDirs, $file);
+            if (blessed $trackObj) {
+                push @songs, {
+                    rowid     => int($rowid),
+                    file      => $file,
+                    title     => $title || 'Unknown Title',
+                    artist    => $artist || 'Unknown Artist',
+                    album     => $album || 'Unknown Album',
+                    year      => $trackObj->year || 0,
+                    audio_url => "/music/" . $trackObj->id . "/download",
+                    track_id  => int($trackObj->id),
+                };
+            }
+        }
+        $sth->finish();
+        $dbh->disconnect();
+    };
+    if ($@) {
+        $log->error("Survey: failed to load songs: $@");
+        _sendJson($httpClient, $response, RC_INTERNAL_SERVER_ERROR, {error => "Database error"});
+        return;
+    }
+
+    if (scalar(@songs) < 3) {
+        _sendJson($httpClient, $response, RC_INTERNAL_SERVER_ERROR,
+            {error => "Not enough analyzed tracks in database (need at least 3, found " . scalar(@songs) . ")"});
+        return;
+    }
+
+    _sendJson($httpClient, $response, RC_OK, {songs => \@songs});
+}
+
+sub _handleGetStatus {
+    my ($httpClient, $response) = @_;
+    my $count = _countTriplets();
+    my $matrixExists = (-e $matrixPath) ? 1 : 0;
+    _sendJson($httpClient, $response, RC_OK, {count => $count, matrix_exists => $matrixExists});
+}
+
+sub _handlePostTriplet {
+    my ($httpClient, $response, $request) = @_;
+    my $body = $request->content;
+    my $data;
+
+    eval { $data = decode_json($body); };
+    if ($@ || !$data) {
+        _sendJson($httpClient, $response, RC_BAD_REQUEST, {error => "Invalid JSON"});
+        return;
+    }
+
+    my $song1 = $data->{song_1};
+    my $song2 = $data->{song_2};
+    my $oddOneOut = $data->{odd_one_out};
+
+    if (!$song1 || !$song2 || !$oddOneOut) {
+        _sendJson($httpClient, $response, RC_BAD_REQUEST, {error => "Missing song file paths"});
+        return;
+    }
+
+    eval {
+        my $triplets = _loadTriplets();
+        push @$triplets, [$song1, $song2, $oddOneOut];
+        _saveTriplets($triplets);
+    };
+    if ($@) {
+        $log->error("Survey: failed to save triplet: $@");
+        _sendJson($httpClient, $response, RC_INTERNAL_SERVER_ERROR, {error => "Failed to save triplet"});
+        return;
+    }
+
+    my $count = _countTriplets();
+    main::DEBUGLOG && $log->debug("Survey: saved triplet (similar: $song1, $song2; odd: $oddOneOut), total: $count");
+    _sendJson($httpClient, $response, RC_OK, {ok => 1, count => $count});
+}
+
+# --- Learning Process Management ---
+
+sub _startLearning {
+    if ($learner && $learner->alive) {
+        return "Learning already running";
+    }
+
+    if (!$learnerBinary) {
+        return "bliss-learner binary not found. Cannot run metric learning.";
+    }
+
+    if (!$dbPath || !-e $dbPath) {
+        return "The upstream BlissMixer analysis database was not found.";
+    }
+
+    if (Plugins::BlissMixerExt::Plugin::_originalAnalyserRunning()) {
+        return "Upstream BlissMixer analysis is running. Try again after it finishes.";
+    }
+
+    my $count = _countTriplets();
+    if ($count < 10) {
+        return "Not enough training data ($count triplets). Complete at least 10 survey rounds first.";
+    }
+
+    $lastLearnerMsg = "";
+    $learningStartTime = time();
+    $learningEndTime = 0;
+    $learnerFailed = 0;
+
+    unlink $learningOutputPath if -e $learningOutputPath;
+
+    my @params = ($learnerBinary, "--db", $dbPath, "--triplets", $tripletsPath,
+                  "--output", $learningOutputPath,
+                  "--logging", "error");
+
+    main::INFOLOG && $log->info("Starting metric learning: " . join(' ', @params));
+
+    eval {
+        require Proc::Background;
+        $learner = Proc::Background->new(
+            { 'die_upon_destroy' => 1 },
+            @params
+        );
+    };
+    if ($@) {
+        $log->error("Survey: failed to start learning: $@");
+        return "Failed to start learning process: $@";
+    }
+
+    # Health-check timer (same as Analyser.pm _checkAnalyser)
+    _startLearnerCheckTimer();
+
+    return "Learning started";
+}
+
+sub _stopLearning {
+    if ($learner && $learner->alive) {
+        $learner->die;
+        main::INFOLOG && $log->info("Metric learning process stopped");
+    }
+    $learner = undef;
+    unlink $learningOutputPath if $learningOutputPath && -e $learningOutputPath;
+    Slim::Utils::Timers::killTimers(undef, \&_checkLearner);
+}
+
+sub _learningEnded {
+    $learningEndTime = time();
+    $learner = undef;
+    Slim::Utils::Timers::killTimers(undef, \&_checkLearner);
+
+    if ($learningOutputPath && -e $learningOutputPath) {
+        unlink $matrixPath if -e $matrixPath;
+        if (!move($learningOutputPath, $matrixPath)) {
+            $learnerFailed = 1;
+            $log->error("Survey: failed to install learned matrix at $matrixPath: $!");
+            return;
+        }
+        main::INFOLOG && $log->info("Metric learning complete. Matrix saved to $matrixPath");
+        $lastLearnerMsg = 'Learning completed';
+        # Restart only the sidecar mixer so it picks up the new matrix.
+        Plugins::BlissMixerExt::Plugin::_stopMixer();
+        main::INFOLOG && $log->info("bliss-mixer-ext stopped; will restart with new matrix on next mix request");
+    } else {
+        $learnerFailed = 1;
+        $lastLearnerMsg = 'Learning failed';
+        $log->warn("Metric learning finished but no matrix file produced at $matrixPath");
+    }
+}
+
+sub _startLearnerCheckTimer {
+    Slim::Utils::Timers::killTimers(undef, \&_checkLearner);
+    Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + CHECK_LEARNER_TIME, \&_checkLearner);
+}
+
+sub _checkLearner {
+    if ($learner && $learner->alive) {
+        # Still running — reschedule the check
+        _startLearnerCheckTimer();
+        return;
+    }
+
+    # A successful learner writes the temporary matrix before exiting. Keeping
+    # the previous matrix until this point makes failed experiments recoverable.
+    _learningEnded();
+}
+
+# --- Triplet File Helpers ---
+
+sub _loadTriplets {
+    return [] unless -e $tripletsPath;
+    my $json = read_file($tripletsPath, { binmode => ':utf8' });
+    return decode_json($json);
+}
+
+sub _saveTriplets {
+    my $triplets = shift;
+    write_file($tripletsPath, { binmode => ':utf8' }, encode_json($triplets));
+}
+
+sub _countTriplets {
+    return 0 unless -e $tripletsPath;
+    my $triplets = eval { _loadTriplets() };
+    return 0 if $@;
+    return scalar @$triplets;
+}
+
+sub _backupTriplets {
+    my $backupDir = $prefs->get('triplets_backup_path');
+    unless ($backupDir && length($backupDir) > 0) {
+        return (0, "Backup folder is not configured.");
+    }
+    unless (-d $backupDir) {
+        $log->warn("Survey: backup path does not exist: $backupDir");
+        return (0, "Backup folder does not exist: $backupDir");
+    }
+    unless (-e $tripletsPath) {
+        return (0, "There is no training data to back up.");
+    }
+    my @t = localtime(time());
+    my $ts = sprintf("%04d%02d%02d-%02d%02d%02d", $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]);
+    my $zipFile = File::Spec->catfile($backupDir, "blissmixerext-triplets-${ts}.zip");
+    my $zip = Archive::Zip->new();
+    $zip->addFile($tripletsPath, "training_triplets.json");
+    if ($zip->writeToFileNamed($zipFile) != AZ_OK) {
+        $log->warn("Survey: failed to write backup to $zipFile");
+        return (0, "Failed to write backup file in configured folder. Check folder permissions.");
+    }
+    main::INFOLOG && $log->info("Survey: backed up triplets to $zipFile");
+    return (1, undef);
+}
+
+sub _restoreBackup {
+    my $zipPath = shift;
+    unless (-f $zipPath) {
+        return "File not found: $zipPath";
+    }
+    my $zip = Archive::Zip->new();
+    unless ($zip->read($zipPath) == AZ_OK) {
+        return "Failed to read zip file";
+    }
+    my $member = $zip->memberNamed("training_triplets.json");
+    unless ($member) {
+        return "training_triplets.json not found in zip";
+    }
+    my ($content, $status) = $zip->contents($member);
+    unless ($status == AZ_OK) {
+        return "Failed to extract training data";
+    }
+    eval { write_file($tripletsPath, { binmode => ':utf8' }, $content); };
+    if ($@) {
+        return "Failed to write training data: $@";
+    }
+    main::INFOLOG && $log->info("Survey: restored triplets from $zipPath");
+    return undef;
+}
+
+sub _clearTrainingData {
+    _stopLearning() if $learner && $learner->alive;
+    if (-e $tripletsPath) {
+        unlink $tripletsPath;
+        main::INFOLOG && $log->info("Survey: deleted training triplets ($tripletsPath)");
+    }
+    if (-e $matrixPath) {
+        unlink $matrixPath;
+        main::INFOLOG && $log->info("Survey: deleted learned matrix ($matrixPath)");
+        # Restart only the sidecar mixer so it stops using the old matrix.
+        Plugins::BlissMixerExt::Plugin::_stopMixer();
+        main::INFOLOG && $log->info("bliss-mixer-ext stopped; will restart without matrix on next mix request");
+    }
+}
+
+sub _sendJson {
+    my ($httpClient, $response, $code, $data) = @_;
+    $response->code($code);
+    $response->content_type('application/json; charset=utf-8');
+    $response->header('Connection' => 'close');
+    $response->content(encode_json($data));
+    $httpClient->send_response($response);
+    Slim::Web::HTTP::closeHTTPSocket($httpClient);
+}
+
+1;
+
+__END__

@@ -1,0 +1,132 @@
+[% PROCESS settings/header.html %]
+
+[% WRAPPER settingSection %]
+    <p>[% "BLISSMIXEREXT_SETTINGS_NOTE" | string %]</p>
+
+    <h3>[% "BLISSMIXEREXT_STATUS" | string %]</h3>
+    [% IF upstream_compatible %]
+        <p style="color:#398439">[% "BLISSMIXEREXT_UPSTREAM_OK" | string %] [% upstream_version %].</p>
+    [% ELSE %]
+        <p style="color:#c9302c">[% "BLISSMIXEREXT_UPSTREAM_MISSING" | string %][% IF upstream_version %] [% upstream_version %].[% END %]</p>
+    [% END %]
+    [% IF database_exists %]
+        <p style="color:#398439">[% "BLISSMIXEREXT_DATABASE_OK" | string %]</p>
+    [% ELSE %]
+        <p style="color:#c9302c">[% "BLISSMIXEREXT_DATABASE_MISSING" | string %]</p>
+    [% END %]
+
+    [% WRAPPER settingGroup title="BLISSMIXEREXT_MIXER_PORT" desc="BLISSMIXEREXT_MIXER_PORT_DESC" %]
+        <input type="number" min="1024" max="65535" class="stdedit" name="pref_mixer_port" id="mixer_port" value="[% prefs.mixer_port %]" size="6">
+        [% IF port_conflict %]
+            <p style="color:#c9302c">[% "BLISSMIXEREXT_PORT_CONFLICT" | string %]</p>
+        [% END %]
+    [% END %]
+
+    [% WRAPPER settingGroup title="BLISSMIXEREXT_LEARNED_BLEND" desc="BLISSMIXEREXT_LEARNED_BLEND_DESC" %]
+        <input type="number" min="0" max="100" class="stdedit" name="pref_learned_blend" id="learned_blend" value="[% prefs.learned_blend %]" size="5">
+    [% END %]
+
+    <hr style="opacity:0.4;margin:20px 0">
+    <h3>[% "BLISSMIXEREXT_LEARNING" | string %]</h3>
+    [% IF no_learner_binary %]
+        <p style="color:#c9302c">[% "BLISSMIXEREXT_LEARNER_NOT_FOUND" | string %]</p>
+    [% ELSE %]
+        <p>[% "BLISSMIXEREXT_LEARNING_NOTE" | string %]</p>
+        <p><a href="[% survey_url %]" target="_blank" style="font-size:115%;font-weight:bold">[% "BLISSMIXEREXT_OPEN_SURVEY" | string %]</a></p>
+
+        <table style="margin:12px 0">
+            <tr><td>[% "BLISSMIXEREXT_TRIPLETS" | string %]</td><td id="triplet-count">-</td></tr>
+            <tr><td>[% "BLISSMIXEREXT_MATRIX" | string %]</td><td id="matrix-status">-</td></tr>
+            <tr><td>Status:</td><td id="learning-status">-</td></tr>
+        </table>
+
+        <button id="learning-button" onclick="toggleLearning()" type="button">[% "BLISSMIXEREXT_RUN_LEARNING" | string %]</button>
+        <button onclick="clearTraining()" type="button">[% "BLISSMIXEREXT_CLEAR_TRAINING" | string %]</button>
+    [% END %]
+
+    [% WRAPPER settingGroup title="BLISSMIXEREXT_BACKUP_PATH" desc="BLISSMIXEREXT_BACKUP_PATH_DESC" %]
+        <input type="text" class="stdedit selectFolder" name="pref_triplets_backup_path" id="triplets_backup_path" value="[% prefs.triplets_backup_path %]" size="50">
+        <button onclick="backupNow()" type="button">[% "BLISSMIXEREXT_BACKUP_NOW" | string %]</button>
+        <span id="backup-status" style="margin-left:8px"></span>
+    [% END %]
+
+    [% WRAPPER settingGroup title="BLISSMIXEREXT_RESTORE_PATH" desc="BLISSMIXEREXT_RESTORE_PATH_DESC" %]
+        <input type="text" class="stdedit selectFile" id="restore_path" value="" size="50">
+        <button onclick="restoreBackup()" type="button">[% "BLISSMIXEREXT_RESTORE" | string %]</button>
+        <span id="restore-status" style="margin-left:8px"></span>
+    [% END %]
+[% END %]
+
+[% PROCESS settings/footer.html %]
+
+<script type="text/javascript">
+    let learningRunning = false;
+
+    async function extCommand(act, extra) {
+        const command = ['blissmixerext', 'survey', 'act:' + act];
+        if (extra) command.push(extra);
+        const response = await fetch('[% jsonrpc_url %]', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Origin': window.location.hostname},
+            body: JSON.stringify({id: 1, method: 'slim.request', params: ['', command]})
+        });
+        return response.json();
+    }
+
+    async function refreshLearning() {
+        try {
+            const response = await extCommand('status');
+            const result = response.result || {};
+            learningRunning = parseInt(result.learning || 0) === 1;
+            document.getElementById('triplet-count').textContent = result.triplets || 0;
+            document.getElementById('matrix-status').textContent = parseInt(result.matrix_exists || 0) === 1
+                ? '[% "BLISSMIXEREXT_MATRIX_AVAILABLE" | string %]'
+                : '[% "BLISSMIXEREXT_MATRIX_MISSING" | string %]';
+            document.getElementById('learning-status').textContent = result.failed
+                ? 'Failed - check the server log'
+                : (result.msg || (learningRunning ? 'Running' : 'Idle'));
+            const button = document.getElementById('learning-button');
+            button.textContent = learningRunning
+                ? '[% "BLISSMIXEREXT_STOP_LEARNING" | string %]'
+                : '[% "BLISSMIXEREXT_RUN_LEARNING" | string %]';
+        } catch (error) {
+            document.getElementById('learning-status').textContent = error.message;
+        }
+    }
+
+    async function toggleLearning() {
+        await extCommand(learningRunning ? 'stop-learning' : 'run-learning');
+        await refreshLearning();
+    }
+
+    async function clearTraining() {
+        if (!confirm('Delete all BlissMixerExt survey answers and the learned matrix?')) return;
+        await extCommand('clear-training-data');
+        await refreshLearning();
+    }
+
+    async function backupNow() {
+        const target = document.getElementById('backup-status');
+        const response = await extCommand('backup');
+        target.textContent = response.result && response.result.ok
+            ? '[% backup_success_text %]'
+            : '[% backup_failed_text %]';
+    }
+
+    async function restoreBackup() {
+        const path = document.getElementById('restore_path').value.trim();
+        if (!path) return;
+        const target = document.getElementById('restore-status');
+        target.textContent = '[% restore_in_progress_text %]';
+        const response = await extCommand('restore-backup', 'path:' + path);
+        target.textContent = response.result && response.result.ok
+            ? '[% restore_success_text %]'
+            : '[% restore_failed_text %]';
+        await refreshLearning();
+    }
+
+    if (document.getElementById('learning-button')) {
+        refreshLearning();
+        setInterval(refreshLearning, 3000);
+    }
+</script>
