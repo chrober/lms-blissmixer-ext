@@ -48,6 +48,20 @@ upstream analyser is active and reloads its mixer when `bliss.db` changes.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the staging and migration model.
 
+## Release and publishing workflow
+
+Pushing a semantic version tag runs `.github/workflows/release.yml`. It validates
+the plugin, reads the pinned native releases from
+`BlissMixerExt/Bin/SOURCE.md`, downloads and verifies every SHA-256 file, and
+creates separate Linux, macOS, and Windows plugin packages. It publishes those
+packages and their SHA-1/SHA-256 files as a GitHub Release, then updates the
+three platform entries in `chrober/lms-plugins`.
+
+The feed update uses the repository secret `LMS_PLUGINS_TOKEN` (the legacy name
+`MS_PLUGINS_TOKEN` is also accepted) with contents-write access to
+`chrober/lms-plugins`. A manual run with `dry_run=true` builds inspectable
+workflow artifacts without publishing or changing the feed.
+
 ## Attribution and licence
 
 This project contains code adapted from Craig Drummond's GPLv3-licensed

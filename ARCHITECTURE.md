@@ -44,6 +44,12 @@ Learning writes to a temporary matrix. The active matrix is replaced only when
 the learner produces a new result, preserving the previous model after a failed
 experiment.
 
+Native executables are released independently by `chrober/bliss-mixer` and
+`chrober/bliss-learner`. BlissMixerExt pins both release tags and commits, checks
+their published SHA-256 files, and renames the verified assets only while
+assembling plugin packages. Workflow artifacts are never used as durable release
+inputs.
+
 ## Feature graduation
 
 When an experiment is accepted upstream:

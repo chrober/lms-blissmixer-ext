@@ -1,4 +1,5 @@
-BlissMixerExt/Bin/
+BlissMixerExt/Bin/*
+!BlissMixerExt/Bin/SOURCE.md
 *.zip
 repo.xml
 public.xml

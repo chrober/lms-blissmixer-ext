@@ -1,0 +1,288 @@
+name: Publish BlissMixerExt
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plugin version/tag. Empty reads BlissMixerExt/install.xml."
+        required: false
+        default: ""
+      mixer_release:
+        description: "bliss-mixer release tag. Empty reads BlissMixerExt/Bin/SOURCE.md."
+        required: false
+        default: ""
+      learner_release:
+        description: "bliss-learner release tag. Empty reads BlissMixerExt/Bin/SOURCE.md."
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark the GitHub release as prerelease."
+        type: boolean
+        required: true
+        default: false
+      dry_run:
+        description: "Build and upload workflow artifacts only; do not create a release or update lms-plugins."
+        type: boolean
+        required: true
+        default: false
+      update_lms_plugins:
+        description: "Update chrober/lms-plugins repo.xml after publishing the release."
+        type: boolean
+        required: true
+        default: true
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+env:
+  MIXER_REPO: chrober/bliss-mixer
+  LEARNER_REPO: chrober/bliss-learner
+  PLUGIN_REPO: chrober/lms-plugins
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python tests/validate_repository.py
+      - run: python -m unittest discover -s tests -p "test_*.py"
+
+  package-release:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      mixer_release: ${{ steps.meta.outputs.mixer_release }}
+      learner_release: ${{ steps.meta.outputs.learner_release }}
+      linux_asset: ${{ steps.meta.outputs.linux_asset }}
+      mac_asset: ${{ steps.meta.outputs.mac_asset }}
+      windows_asset: ${{ steps.meta.outputs.windows_asset }}
+      linux_url: ${{ steps.meta.outputs.linux_url }}
+      mac_url: ${{ steps.meta.outputs.mac_url }}
+      windows_url: ${{ steps.meta.outputs.windows_url }}
+      linux_sha1: ${{ steps.package.outputs.linux_sha1 }}
+      mac_sha1: ${{ steps.package.outputs.mac_sha1 }}
+      windows_sha1: ${{ steps.package.outputs.windows_sha1 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Derive and validate release metadata
+        id: meta
+        env:
+          VERSION_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+          MIXER_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.mixer_release || '' }}
+          LEARNER_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.learner_release || '' }}
+        run: |
+          set -euo pipefail
+          install_version="$(python -c 'import xml.etree.ElementTree as ET; print(ET.parse("BlissMixerExt/install.xml").getroot().findtext("version"))')"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          else
+            version="${VERSION_INPUT#v}"
+            version="${version:-$install_version}"
+            tag="$version"
+          fi
+          if [ "$version" != "$install_version" ]; then
+            echo "Requested version $version does not match install.xml version $install_version" >&2
+            exit 1
+          fi
+
+          source_file="BlissMixerExt/Bin/SOURCE.md"
+          mixer_release="${MIXER_INPUT:-$(python -c 'import pathlib,re; t=pathlib.Path("BlissMixerExt/Bin/SOURCE.md").read_text(); m=re.search(r"Mixer release:\s*`([^`]+)`",t); print(m.group(1) if m else "")')}"
+          learner_release="${LEARNER_INPUT:-$(python -c 'import pathlib,re; t=pathlib.Path("BlissMixerExt/Bin/SOURCE.md").read_text(); m=re.search(r"Learner release:\s*`([^`]+)`",t); print(m.group(1) if m else "")')}"
+          if [ -z "$mixer_release" ] || [ -z "$learner_release" ]; then
+            echo "Could not determine native component releases from $source_file" >&2
+            exit 1
+          fi
+
+          linux_asset="lms-blissmixer-ext-linux-$version.zip"
+          mac_asset="lms-blissmixer-ext-mac-$version.zip"
+          windows_asset="lms-blissmixer-ext-windows-$version.zip"
+          base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$tag"
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "mixer_release=$mixer_release"
+            echo "learner_release=$learner_release"
+            echo "linux_asset=$linux_asset"
+            echo "mac_asset=$mac_asset"
+            echo "windows_asset=$windows_asset"
+            echo "linux_url=$base_url/$linux_asset"
+            echo "mac_url=$base_url/$mac_asset"
+            echo "windows_url=$base_url/$windows_asset"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download native release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIXER_RELEASE: ${{ steps.meta.outputs.mixer_release }}
+          LEARNER_RELEASE: ${{ steps.meta.outputs.learner_release }}
+        run: |
+          set -euo pipefail
+          mkdir -p native/mixer native/learner
+          gh release download "$MIXER_RELEASE" --repo "$MIXER_REPO" --dir native/mixer --pattern 'bliss-mixer-*'
+          gh release download "$LEARNER_RELEASE" --repo "$LEARNER_REPO" --dir native/learner --pattern 'bliss-learner-*'
+          (cd native/mixer && sha256sum -c *.sha256)
+          (cd native/learner && sha256sum -c *.sha256)
+
+      - name: Install Ext-named binaries into plugin tree
+        run: |
+          set -euo pipefail
+          install -m 0755 -D native/mixer/bliss-mixer-x86_64-linux BlissMixerExt/Bin/x86_64-linux/bliss-mixer-ext
+          install -m 0755 -D native/learner/bliss-learner-x86_64-linux BlissMixerExt/Bin/x86_64-linux/bliss-learner-ext
+          install -m 0755 -D native/mixer/bliss-mixer-aarch64-linux BlissMixerExt/Bin/aarch64-linux/bliss-mixer-ext
+          install -m 0755 -D native/learner/bliss-learner-aarch64-linux BlissMixerExt/Bin/aarch64-linux/bliss-learner-ext
+          install -m 0755 -D native/mixer/bliss-mixer-armhf-linux BlissMixerExt/Bin/armhf-linux/bliss-mixer-ext
+          install -m 0755 -D native/learner/bliss-learner-armhf-linux BlissMixerExt/Bin/armhf-linux/bliss-learner-ext
+          install -m 0755 -D native/mixer/bliss-mixer-mac BlissMixerExt/Bin/mac/bliss-mixer-ext
+          install -m 0755 -D native/learner/bliss-learner-mac BlissMixerExt/Bin/mac/bliss-learner-ext
+          install -m 0644 -D native/mixer/bliss-mixer-windows.exe BlissMixerExt/Bin/windows/bliss-mixer-ext.exe
+          install -m 0644 -D native/learner/bliss-learner-windows.exe BlissMixerExt/Bin/windows/bliss-learner-ext.exe
+
+      - name: Package platform plugin archives
+        id: package
+        env:
+          LINUX_ASSET: ${{ steps.meta.outputs.linux_asset }}
+          MAC_ASSET: ${{ steps.meta.outputs.mac_asset }}
+          WINDOWS_ASSET: ${{ steps.meta.outputs.windows_asset }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist staging
+          package_platform() {
+            platform="$1"
+            asset="$2"
+            rm -rf staging/BlissMixerExt
+            cp -a BlissMixerExt staging/BlissMixerExt
+            case "$platform" in
+              linux) rm -rf staging/BlissMixerExt/Bin/mac staging/BlissMixerExt/Bin/windows ;;
+              mac) rm -rf staging/BlissMixerExt/Bin/aarch64-linux staging/BlissMixerExt/Bin/armhf-linux staging/BlissMixerExt/Bin/x86_64-linux staging/BlissMixerExt/Bin/windows ;;
+              windows) rm -rf staging/BlissMixerExt/Bin/aarch64-linux staging/BlissMixerExt/Bin/armhf-linux staging/BlissMixerExt/Bin/x86_64-linux staging/BlissMixerExt/Bin/mac ;;
+            esac
+            (cd staging && zip -q -r "../dist/$asset" BlissMixerExt)
+          }
+          package_platform linux "$LINUX_ASSET"
+          package_platform mac "$MAC_ASSET"
+          package_platform windows "$WINDOWS_ASSET"
+          for asset in "$LINUX_ASSET" "$MAC_ASSET" "$WINDOWS_ASSET"; do
+            (cd dist && sha1sum "$asset" > "$asset.sha1")
+            (cd dist && sha256sum "$asset" > "$asset.sha256")
+          done
+          echo "linux_sha1=$(sha1sum "dist/$LINUX_ASSET" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "mac_sha1=$(sha1sum "dist/$MAC_ASSET" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "windows_sha1=$(sha1sum "dist/$WINDOWS_ASSET" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify archive layout
+        env:
+          LINUX_ASSET: ${{ steps.meta.outputs.linux_asset }}
+          MAC_ASSET: ${{ steps.meta.outputs.mac_asset }}
+          WINDOWS_ASSET: ${{ steps.meta.outputs.windows_asset }}
+        run: |
+          set -euo pipefail
+          unzip -l "dist/$LINUX_ASSET" | grep 'BlissMixerExt/Bin/x86_64-linux/bliss-mixer-ext'
+          unzip -l "dist/$LINUX_ASSET" | grep 'BlissMixerExt/Bin/aarch64-linux/bliss-learner-ext'
+          unzip -l "dist/$MAC_ASSET" | grep 'BlissMixerExt/Bin/mac/bliss-mixer-ext'
+          unzip -l "dist/$WINDOWS_ASSET" | grep 'BlissMixerExt/Bin/windows/bliss-learner-ext.exe'
+          if unzip -Z1 "dist/$MAC_ASSET" | grep -Eq 'Bin/(windows|x86_64-linux|aarch64-linux|armhf-linux)/'; then exit 1; fi
+          if unzip -Z1 "dist/$WINDOWS_ASSET" | grep -Eq 'Bin/(mac|x86_64-linux|aarch64-linux|armhf-linux)/'; then exit 1; fi
+
+      - name: Upload packages as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: blissmixerext-${{ steps.meta.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          MIXER_RELEASE: ${{ steps.meta.outputs.mixer_release }}
+          LEARNER_RELEASE: ${{ steps.meta.outputs.learner_release }}
+          PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+        run: |
+          set -euo pipefail
+          notes="dist/release-notes.md"
+          {
+            echo "# BlissMixerExt $VERSION"
+            echo
+            echo "Experimental sidecar plugin for Bliss Mixer with Windows, macOS, x86_64 Linux, ARM64 Linux, and ARMHF Linux binaries."
+            echo
+            echo "Bundled bliss-mixer release: $MIXER_RELEASE"
+            echo "Bundled bliss-learner release: $LEARNER_RELEASE"
+          } > "$notes"
+          prerelease_flag=()
+          if [ "$PRERELEASE" = "true" ]; then prerelease_flag=(--prerelease); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip dist/*.sha1 dist/*.sha256 --clobber
+          else
+            gh release create "$TAG" dist/*.zip dist/*.sha1 dist/*.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "BlissMixerExt $VERSION" \
+              --notes-file "$notes" \
+              "${prerelease_flag[@]}"
+          fi
+
+      - name: Require cross-repository feed token
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && (github.event_name != 'workflow_dispatch' || inputs.update_lms_plugins) }}
+        env:
+          LMS_PLUGINS_TOKEN: ${{ secrets.LMS_PLUGINS_TOKEN || secrets.MS_PLUGINS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$LMS_PLUGINS_TOKEN" ]; then
+            echo "Set LMS_PLUGINS_TOKEN or MS_PLUGINS_TOKEN with contents:write access to $PLUGIN_REPO." >&2
+            exit 1
+          fi
+
+      - name: Checkout lms-plugins feed repository
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && (github.event_name != 'workflow_dispatch' || inputs.update_lms_plugins) }}
+        uses: actions/checkout@v7
+        with:
+          repository: chrober/lms-plugins
+          path: lms-plugins
+          token: ${{ secrets.LMS_PLUGINS_TOKEN || secrets.MS_PLUGINS_TOKEN }}
+
+      - name: Update lms-plugins repo.xml
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && (github.event_name != 'workflow_dispatch' || inputs.update_lms_plugins) }}
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          LINUX_URL: ${{ steps.meta.outputs.linux_url }}
+          MAC_URL: ${{ steps.meta.outputs.mac_url }}
+          WINDOWS_URL: ${{ steps.meta.outputs.windows_url }}
+          LINUX_SHA: ${{ steps.package.outputs.linux_sha1 }}
+          MAC_SHA: ${{ steps.package.outputs.mac_sha1 }}
+          WINDOWS_SHA: ${{ steps.package.outputs.windows_sha1 }}
+        run: |
+          set -euo pipefail
+          python scripts/update_lms_plugins_repo.py \
+            --repo-xml lms-plugins/repo.xml \
+            --version "$VERSION" \
+            --linux-url "$LINUX_URL" --linux-sha "$LINUX_SHA" \
+            --mac-url "$MAC_URL" --mac-sha "$MAC_SHA" \
+            --windows-url "$WINDOWS_URL" --windows-sha "$WINDOWS_SHA"
+          python -c "import xml.etree.ElementTree as ET; ET.parse('lms-plugins/repo.xml')"
+
+      - name: Commit lms-plugins update
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && (github.event_name != 'workflow_dispatch' || inputs.update_lms_plugins) }}
+        working-directory: lms-plugins
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- repo.xml; then
+            echo "repo.xml already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add repo.xml
+          git commit -m "Publish BlissMixerExt ${{ steps.meta.outputs.version }}"
+          git push

@@ -51,4 +51,22 @@ for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):
     if upstream_pref not in {"mixer_port", "learned_blend", "triplets_backup_path"}:
         fail(f"settings page duplicates upstream preference: {upstream_pref}")
 
+release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+for requirement in (
+    "chrober/bliss-mixer",
+    "chrober/bliss-learner",
+    "sha256sum -c *.sha256",
+    "lms-blissmixer-ext-linux-",
+    "lms-blissmixer-ext-mac-",
+    "lms-blissmixer-ext-windows-",
+    "scripts/update_lms_plugins_repo.py",
+):
+    if requirement not in release_workflow:
+        fail(f"release workflow is missing: {requirement}")
+
+source_manifest = (PLUGIN / "Bin/SOURCE.md").read_text(encoding="utf-8")
+for label in ("Mixer release", "Mixer commit", "Learner release", "Learner commit"):
+    if not re.search(rf"{label}:\s*`[^`]+`", source_manifest):
+        fail(f"binary provenance is missing {label}")
+
 print("BlissMixerExt repository validation passed")

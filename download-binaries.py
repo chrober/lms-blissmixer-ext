@@ -1,126 +1,104 @@
 #!/usr/bin/env python3
+"""Download and verify the native releases pinned for BlissMixerExt."""
 
-#
-# LMS-BlissMixerExt
-#
-# Copyright (c) 2022-2026 Craig Drummond <craig.p.drummond@gmail.com>
-# MIT license.
-#
+from __future__ import annotations
 
-import datetime, hashlib, os, requests, shutil, subprocess, sys, tempfile, time, zipfile
+import hashlib
+import os
+import re
+import stat
+from pathlib import Path
 
-PLUGIN_NAME = "BlissMixerExt"
-GITHUB_TOKEN_FILE = "%s/.config/github-token" % os.path.expanduser('~')
-MIXER_GITHUB_REPO = "chrober/bliss-mixer"
-MIXER_GITHUB_ARTIFACTS = {"bliss-mixer-linux-x86": {"bliss-mixer": "x86_64-linux/bliss-mixer-ext"},
-                          "bliss-mixer-linux-arm": {"bin/bliss-mixer-armhf": "armhf-linux/bliss-mixer-ext", "bin/bliss-mixer-aarch64": "aarch64-linux/bliss-mixer-ext"},
-                          "bliss-mixer-mac":       {"bliss-mixer": "mac/bliss-mixer-ext"},
-                          "bliss-mixer-windows":   {"bliss-mixer.exe": "windows/bliss-mixer-ext.exe"}}
-LEARNER_GITHUB_REPO = "chrober/bliss-learner"
-LEARNER_GITHUB_ARTIFACTS = {"bliss-learner-linux-x86": {"bliss-learner": "x86_64-linux/bliss-learner-ext"},
-                            "bliss-learner-linux-arm": {"bin/bliss-learner-armhf": "armhf-linux/bliss-learner-ext", "bin/bliss-learner-aarch64": "aarch64-linux/bliss-learner-ext"},
-                            "bliss-learner-mac":       {"bliss-learner": "mac/bliss-learner-ext"},
-                            "bliss-learner-windows":   {"bliss-learner.exe": "windows/bliss-learner-ext.exe"}}
+import requests
 
+ROOT = Path(__file__).resolve().parent
+PLUGIN = ROOT / "BlissMixerExt"
+SOURCE = PLUGIN / "Bin" / "SOURCE.md"
 
-def info(s):
-    print("INFO: %s" %s)
-
-
-def error(s):
-    print("ERROR: %s" % s)
-    exit(-1)
-
-
-def to_time(tstr):
-    return time.mktime(datetime.datetime.strptime(tstr, "%Y-%m-%dT%H:%M:%SZ").timetuple())
-
-
-def get_items(repo, artifacts):
-    info("Getting artifact list for %s" % repo)
-    js = requests.get("https://api.github.com/repos/%s/actions/artifacts" % repo).json()
-    if js is None or not "artifacts" in js:
-        error("Failed to list artifacts")
-
-    items={}
-    for a in js["artifacts"]:
-        if a["name"] in artifacts and (not a["name"] in items or to_time(a["created_at"])>items[a["name"]]["date"]):
-            items[a["name"]]={"date":to_time(a["created_at"]), "url":a["archive_download_url"]}
-
-    return items
+COMPONENTS = {
+    "mixer": {
+        "repo": "chrober/bliss-mixer",
+        "label": "Mixer release",
+        "assets": {
+            "bliss-mixer-x86_64-linux": "x86_64-linux/bliss-mixer-ext",
+            "bliss-mixer-aarch64-linux": "aarch64-linux/bliss-mixer-ext",
+            "bliss-mixer-armhf-linux": "armhf-linux/bliss-mixer-ext",
+            "bliss-mixer-mac": "mac/bliss-mixer-ext",
+            "bliss-mixer-windows.exe": "windows/bliss-mixer-ext.exe",
+        },
+    },
+    "learner": {
+        "repo": "chrober/bliss-learner",
+        "label": "Learner release",
+        "assets": {
+            "bliss-learner-x86_64-linux": "x86_64-linux/bliss-learner-ext",
+            "bliss-learner-aarch64-linux": "aarch64-linux/bliss-learner-ext",
+            "bliss-learner-armhf-linux": "armhf-linux/bliss-learner-ext",
+            "bliss-learner-mac": "mac/bliss-learner-ext",
+            "bliss-learner-windows.exe": "windows/bliss-learner-ext.exe",
+        },
+    },
+}
 
 
-def getMd5sum(path):
-    if not os.path.exists(path):
-        return '000'
-    md5 = hashlib.md5()
-    with open(path, 'rb') as f:
-        while True:
-            data = f.read(65535)
-            if not data:
-                break
-            md5.update(data)
-    return md5.hexdigest()
+def pinned_release(label: str) -> str:
+    text = SOURCE.read_text(encoding="utf-8")
+    match = re.search(rf"{re.escape(label)}:\s*`([^`]+)`", text)
+    if not match:
+        raise RuntimeError(f"Could not find {label} in {SOURCE}")
+    return match.group(1)
 
 
-def download_artifacts(repo, artifacts):
-    items = get_items(repo, artifacts)
-    if len(items)!=len(artifacts):
-        error("Failed to determine all artifacts (%d != %d)" % (len(items), len(artifacts)))
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token and os.path.exists(GITHUB_TOKEN_FILE):
-        with open(GITHUB_TOKEN_FILE, "r") as f:
-            token = f.readlines()[0].strip()
-    if not token:
-        try:
-            token = subprocess.check_output(
-                ["gh", "auth", "token"], text=True
-            ).strip()
-        except (OSError, subprocess.CalledProcessError):
-            error("GitHub token not found; set GITHUB_TOKEN or authenticate with gh")
-    headers = {"Authorization": "token %s" % token}
-    ok = True
-    updated = False
-
-    for name in items:
-        with tempfile.TemporaryDirectory() as td:
-            artifact = artifacts[name]
-            url = items[name]["url"]
-            info("Downloading %s" % url)
-            r = requests.get(url, headers=headers, stream=True)
-            dest = os.path.join(td, name+".zip")
-            with open(dest, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024*1024):
-                    if chunk:
-                        f.write(chunk)
-            if not os.path.exists(dest):
-                info("Failed to download %s" % url)
-                ok = False
-                break
-
-            with zipfile.ZipFile(dest, 'r') as zf:
-                zf.extractall(td)
-
-            for a in artifact:
-                asrc = "%s/%s" % (td, a)
-                adest = "%s/%s/Bin/%s" % (os.path.dirname(os.path.abspath(__file__)), PLUGIN_NAME, artifact[a])
-                srcMd5 = getMd5sum(asrc)
-                destMd5 = getMd5sum(adest)
-                if srcMd5!=destMd5:
-                    os.makedirs(os.path.dirname(adest), exist_ok=True)
-                    info("Moving %s to %s" % (a, adest))
-                    shutil.move("%s/%s" % (td, a), adest)
-                    if sys.platform != 'win32':
-                        subprocess.call(["chmod", "a+x", adest], shell=False)
-                    updated = True
-
-    if not ok:
-        error("Failed to download artifacts")
-    elif not updated:
-        info("No changes")
+def session() -> requests.Session:
+    client = requests.Session()
+    client.headers["Accept"] = "application/vnd.github+json"
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        client.headers["Authorization"] = f"Bearer {token}"
+    return client
 
 
-if len(sys.argv)<2 or sys.argv[1]=='mixer':
-    download_artifacts(MIXER_GITHUB_REPO, MIXER_GITHUB_ARTIFACTS)
-if len(sys.argv)<2 or sys.argv[1]=='learner':
-    download_artifacts(LEARNER_GITHUB_REPO, LEARNER_GITHUB_ARTIFACTS)
+def download_component(client: requests.Session, component: dict[str, object]) -> None:
+    repo = str(component["repo"])
+    tag = pinned_release(str(component["label"]))
+    response = client.get(f"https://api.github.com/repos/{repo}/releases/tags/{tag}", timeout=30)
+    response.raise_for_status()
+    urls = {asset["name"]: asset["browser_download_url"] for asset in response.json()["assets"]}
+
+    assets = component["assets"]
+    assert isinstance(assets, dict)
+    for asset_name, relative_destination in assets.items():
+        checksum_name = f"{asset_name}.sha256"
+        if asset_name not in urls or checksum_name not in urls:
+            raise RuntimeError(f"Release {repo}@{tag} is missing {asset_name} or its checksum")
+
+        checksum_response = client.get(urls[checksum_name], timeout=30)
+        checksum_response.raise_for_status()
+        expected = checksum_response.text.split()[0].lower()
+
+        binary_response = client.get(urls[asset_name], timeout=120)
+        binary_response.raise_for_status()
+        content = binary_response.content
+        actual = hashlib.sha256(content).hexdigest()
+        if actual != expected:
+            raise RuntimeError(f"SHA-256 mismatch for {asset_name}: {actual} != {expected}")
+
+        destination = PLUGIN / "Bin" / str(relative_destination)
+        if destination.exists() and hashlib.sha256(destination.read_bytes()).hexdigest() == actual:
+            print(f"unchanged {destination.relative_to(ROOT)}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        if destination.suffix.lower() != ".exe":
+            destination.chmod(destination.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"installed {destination.relative_to(ROOT)}")
+
+
+def main() -> None:
+    client = session()
+    for component in COMPONENTS.values():
+        download_component(client, component)
+
+
+if __name__ == "__main__":
+    main()
