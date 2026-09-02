@@ -48,6 +48,18 @@ upstream analyser is active and reloads its mixer when `bliss.db` changes.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the staging and migration model.
 
+## Testing
+
+Every push and pull request runs repository validation, feed-update unit tests,
+and the Perl plugin regression suite. The Perl tests exercise the sidecar's
+upstream compatibility gate, DSTM identity and port isolation, inherited mixer
+preferences, survey persistence and backup/restore, and learned-matrix
+replacement behavior. Release publication runs the same test gate.
+
+On a Debian-based development system, run the complete plugin suite with
+`prove -l tests` after installing the Perl dependencies listed in
+`.github/workflows/validate.yml`.
+
 ## Release and publishing workflow
 
 Pushing a semantic version tag runs `.github/workflows/release.yml`. It validates
