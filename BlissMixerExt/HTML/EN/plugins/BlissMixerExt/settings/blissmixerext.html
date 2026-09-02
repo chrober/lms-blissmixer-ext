@@ -15,15 +15,8 @@
         <p style="color:#c9302c">[% "BLISSMIXEREXT_DATABASE_MISSING" | string %]</p>
     [% END %]
 
-    [% WRAPPER settingGroup title="BLISSMIXEREXT_MIXER_PORT" desc="BLISSMIXEREXT_MIXER_PORT_DESC" %]
-        <input type="number" min="1024" max="65535" class="stdedit" name="pref_mixer_port" id="mixer_port" value="[% prefs.mixer_port %]" size="6">
-        [% IF port_conflict %]
-            <p style="color:#c9302c">[% "BLISSMIXEREXT_PORT_CONFLICT" | string %]</p>
-        [% END %]
-    [% END %]
-
     [% WRAPPER settingGroup title="BLISSMIXEREXT_LEARNED_BLEND" desc="BLISSMIXEREXT_LEARNED_BLEND_DESC" %]
-        <input type="number" min="0" max="100" class="stdedit" name="pref_learned_blend" id="learned_blend" value="[% prefs.learned_blend %]" size="5">
+        <input type="number" min="0" max="100" class="stdedit sliderInput_0_100_1" name="pref_learned_blend" id="learned_blend" value="[% prefs.learned_blend %]" size="5">
     [% END %]
 
     <hr style="opacity:0.4;margin:20px 0">

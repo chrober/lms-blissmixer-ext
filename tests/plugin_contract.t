@@ -26,7 +26,6 @@ BEGIN {
             use_track_genre => 0,
         },
         'plugin.blissmixerext' => {
-            mixer_port => 12001,
             learned_blend => 50,
         },
     );
@@ -155,20 +154,24 @@ Plugins::BlissMixerExt::Plugin->postinitPlugin();
 is(scalar @Slim::Plugin::DontStopTheMusic::Plugin::registered, 0,
     'incompatible upstream prevents DSTM registration');
 
-$TestPrefs::values{'plugin.blissmixerext'}{mixer_port} = 12001;
-$TestPrefs::values{'plugin.blissmixer'}{mixer_port} = 12000;
-is(Plugins::BlissMixerExt::Plugin::_configuredMixerPort(), 12001,
-    'a distinct sidecar port is accepted');
+{
+    no warnings 'redefine';
+    local *Plugins::BlissMixerExt::Plugin::_portAvailable = sub {
+        return $_[0] == 12003;
+    };
+    $TestPrefs::values{'plugin.blissmixer'}{mixer_port} = 12002;
+    is(Plugins::BlissMixerExt::Plugin::_availableMixerPort(), 12003,
+        'the sidecar automatically selects the first available loopback port');
+}
 
-$TestPrefs::values{'plugin.blissmixerext'}{mixer_port} = 12000;
-is(Plugins::BlissMixerExt::Plugin::_configuredMixerPort(), 0,
-    'the upstream mixer port cannot be reused');
+{
+    no warnings 'redefine';
+    local *Plugins::BlissMixerExt::Plugin::_portAvailable = sub { return 1 };
+    $TestPrefs::values{'plugin.blissmixer'}{mixer_port} = 12001;
+    is(Plugins::BlissMixerExt::Plugin::_availableMixerPort(), 12002,
+        'automatic selection never reuses the configured upstream mixer port');
+}
 
-$TestPrefs::values{'plugin.blissmixerext'}{mixer_port} = 80;
-is(Plugins::BlissMixerExt::Plugin::_configuredMixerPort(), 0,
-    'a privileged sidecar port is rejected');
-
-$TestPrefs::values{'plugin.blissmixerext'}{mixer_port} = 12001;
 my @default_weights = split /,/, Plugins::BlissMixerExt::Plugin::_weightParam();
 is(scalar @default_weights, 23, 'BlissMixer weights expand to all 23 analysis features');
 ok(!(grep { abs($_ - 1) > 0.000001 } @default_weights),

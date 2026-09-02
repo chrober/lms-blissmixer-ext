@@ -12,6 +12,7 @@ package Plugins::BlissMixerExt::Plugin;
 use strict;
 
 use Scalar::Util qw(blessed);
+use IO::Socket::INET;
 use LWP::UserAgent;
 use JSON::XS::VersionOneAndTwo;
 use File::Basename;
@@ -37,6 +38,8 @@ use constant DEF_MAX_PREVIOUS_TRACKS => 100;
 use constant DB_NAME  => "bliss.db";
 use constant STOP_MIXER => 60 * 60;
 use constant MAX_MIXER_START_CHECKS => 10;
+use constant FIRST_MIXER_PORT => 12001;
+use constant LAST_MIXER_PORT => 12100;
 use constant MIN_BLISSMIXER_VERSION => '0.10.0';
 
 my $log = Slim::Utils::Log->addLogCategory({
@@ -85,11 +88,9 @@ sub initPlugin {
     return 1 if $initialized;
 
     $extprefs->init({
-        mixer_port       => 12001,
         learned_blend    => 50,
         triplets_backup_path => ''
     });
-    $extprefs->setChange(\&_stopMixer, 'mixer_port');
 
     if ( main::WEBUI ) {
         Plugins::BlissMixerExt::Settings->new;
@@ -173,28 +174,35 @@ sub _stopMixer {
     $mixerPort = 0;
 }
 
-sub _configuredMixerPort {
-    my $port = int($extprefs->get('mixer_port') || 12001);
-    my $upstreamPort = int($prefs->get('mixer_port') || 12000);
-
-    if ($port < 1024 || $port > 65535) {
-        $log->warn("Invalid bliss-mixer-ext port: $port");
-        return 0;
-    }
-    if ($port == $upstreamPort) {
-        $log->warn("bliss-mixer-ext port $port conflicts with upstream BlissMixer");
-        return 0;
-    }
-    return $port;
+sub _portAvailable {
+    my $port = shift;
+    my $socket = IO::Socket::INET->new(
+        LocalAddr => '127.0.0.1',
+        LocalPort => $port,
+        Proto => 'tcp',
+        Listen => 1,
+        ReuseAddr => 0,
+    );
+    return 0 unless $socket;
+    close $socket;
+    return 1;
 }
 
-# The Ext binary deliberately uses a fixed loopback-only port. The current
+sub _availableMixerPort {
+    my $upstreamPort = int($prefs->get('mixer_port') || 0);
+    for my $port (FIRST_MIXER_PORT .. LAST_MIXER_PORT) {
+        next if $port == $upstreamPort;
+        return $port if _portAvailable($port);
+    }
+    $log->warn('Could not find an available loopback port for bliss-mixer-ext');
+    return 0;
+}
+
+# The Ext binary deliberately uses an auto-selected loopback-only port. The
 # experimental binary reports dynamic ports to the upstream "blissmixer"
 # command, which a sidecar must never replace or intercept.
 sub _checkIfMixerReady {
-    my $attempts = shift;
-    my $port = _configuredMixerPort();
-    return unless $port;
+    my ($attempts, $port) = @_;
     my $url = "http://localhost:$port/api/ready";
     my $http = LWP::UserAgent->new;
 
@@ -210,7 +218,7 @@ sub _checkIfMixerReady {
         sub {
             if ($attempts < MAX_MIXER_START_CHECKS) {
                 Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 1, sub {
-                    _checkIfMixerReady($attempts + 1);
+                    _checkIfMixerReady($attempts + 1, $port);
                 });
             } else {
                 main::DEBUGLOG && $log->debug("Could not determine if mixer is ready, assume it is?");
@@ -287,7 +295,7 @@ sub _startMixer {
         return 0;
     }
     $mixerPort = 0;
-    my $cfgPort = _configuredMixerPort();
+    my $cfgPort = _availableMixerPort();
     return 0 unless $cfgPort;
     my @params = ("--port", $cfgPort);
     push @params, "--db";
@@ -317,7 +325,7 @@ sub _startMixer {
         Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 1, sub {
             if ($mixer && $mixer->alive) {
                 main::DEBUGLOG && $log->debug("$mixerBinary running");
-                _checkIfMixerReady(0);
+                _checkIfMixerReady(0, $cfgPort);
             } else {
                 main::DEBUGLOG && $log->debug("$mixerBinary NOT running");
             }
@@ -712,7 +720,7 @@ sub _dstmMix {
             }
 
             my $jsonData = _getMixData(\@seedsToUse, $previousTracks ? \@$previousTracks : undef, $requestCount, $shuffle, $filterGenres, $noRepArtOverride, $noRepAlbOverride);
-            my $port = $mixerPort || _configuredMixerPort();
+            my $port = $mixerPort;
             unless ($port) {
                 _mixFailed($client, $cb, $numSpot);
                 return;

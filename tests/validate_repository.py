@@ -31,7 +31,7 @@ required = {
     "separate mixer binary": "findbin('bliss-mixer-ext')",
     "separate learner binary": "findbin('bliss-learner-ext')",
     "loopback-only mixer": 'push @params, "127.0.0.1"',
-    "port collision guard": "conflicts with upstream BlissMixer",
+    "automatic loopback port selection": "_availableMixerPort",
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source:
@@ -48,8 +48,12 @@ for forbidden in (
 
 settings = (PLUGIN / "HTML/EN/plugins/BlissMixerExt/settings/blissmixerext.html").read_text(encoding="utf-8")
 for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):
-    if upstream_pref not in {"mixer_port", "learned_blend", "triplets_backup_path"}:
+    if upstream_pref not in {"learned_blend", "triplets_backup_path"}:
         fail(f"settings page duplicates upstream preference: {upstream_pref}")
+if 'name="pref_mixer_port"' in settings:
+    fail("settings page must not expose the sidecar's internal mixer port")
+if "sliderInput_0_100_1" not in settings:
+    fail("learned matrix influence must use the LMS slider control")
 
 settings_source = (PLUGIN / "Settings.pm").read_text(encoding="utf-8")
 if "protectName('BLISSMIXEREXT')" not in settings_source:

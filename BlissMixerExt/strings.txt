@@ -25,15 +25,6 @@ BLISSMIXEREXT_DATABASE_MISSING
 BLISSMIXEREXT_SETTINGS_NOTE
 	EN	BlissMixerExt uses the mixer, filter, seed, genre, and Last.fm settings from upstream BlissMixer. Only experimental settings are shown here.
 
-BLISSMIXEREXT_MIXER_PORT
-	EN	Experimental mixer port
-
-BLISSMIXEREXT_MIXER_PORT_DESC
-	EN	Loopback port used only by bliss-mixer-ext. It must differ from the upstream BlissMixer port. Default: 12001.
-
-BLISSMIXEREXT_PORT_CONFLICT
-	EN	This port is also configured for upstream BlissMixer. Choose a different port before using Bliss (Ext).
-
 BLISSMIXEREXT_LEARNED_BLEND
 	EN	Learned matrix influence
 

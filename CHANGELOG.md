@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-09-02
+
+- Restore the LMS slider control for Learned matrix influence.
+- Remove the mixer port from the user-facing settings and automatically select
+  an available loopback port for the experimental mixer process.
+
 ## 0.1.1 - 2026-09-02
 
 - Fix the LMS string catalog delimiters so the plugin name and settings labels

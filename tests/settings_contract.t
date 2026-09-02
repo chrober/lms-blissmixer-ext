@@ -15,8 +15,7 @@ BEGIN {
 
     package TestSettingsPrefs;
     our %values = (
-        'plugin.blissmixerext' => {mixer_port => 12001},
-        'plugin.blissmixer' => {mixer_port => 12000},
+        'plugin.blissmixerext' => {},
         server => {httpport => 9000},
     );
     sub get { return $values{$_[0]->{name}}{$_[1]} }
@@ -69,6 +68,12 @@ is(
     'plugins/BlissMixerExt/settings/blissmixerext.html',
     'settings page keeps the sidecar route',
 );
+my (undef, @preference_names) = Plugins::BlissMixerExt::Settings->prefs();
+is_deeply(
+    \@preference_names,
+    [qw(learned_blend triplets_backup_path)],
+    'settings expose only user-meaningful experimental preferences',
+);
 
 my %request_host = (host => '192.168.1.111:9000');
 Plugins::BlissMixerExt::Settings->beforeRender(\%request_host);
@@ -78,7 +83,6 @@ is(
     'JSON-RPC uses the browser-facing LMS request host',
 );
 ok($request_host{upstream_compatible}, 'compatible upstream is reported');
-ok(!$request_host{port_conflict}, 'distinct mixer ports are reported as safe');
 ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
 is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
     'dynamic JavaScript messages are localized before rendering');

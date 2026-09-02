@@ -19,7 +19,6 @@ use Slim::Utils::Strings qw(string);
 use Slim::Utils::Versions;
 
 my $prefs = preferences('plugin.blissmixerext');
-my $baseprefs = preferences('plugin.blissmixer');
 my $serverprefs = preferences('server');
 
 sub name {
@@ -31,7 +30,7 @@ sub page {
 }
 
 sub prefs {
-    return ($prefs, 'mixer_port', 'learned_blend', 'triplets_backup_path');
+    return ($prefs, 'learned_blend', 'triplets_backup_path');
 }
 
 sub beforeRender {
@@ -50,8 +49,6 @@ sub beforeRender {
         && Slim::Utils::Versions->compareVersions($manifest->{version} || '0', '0.10.0') >= 0 ? 1 : 0;
     $paramRef->{database_exists} = -e File::Spec->catfile($dbDir, 'bliss.db') ? 1 : 0;
     $paramRef->{matrix_exists} = -e File::Spec->catfile($dbDir, 'blissmixer-ext-matrix.json') ? 1 : 0;
-    $paramRef->{port_conflict} = int($prefs->get('mixer_port') || 12001)
-        == int($baseprefs->get('mixer_port') || 12000) ? 1 : 0;
     $paramRef->{no_learner_binary} = !Slim::Utils::Misc::findbin('bliss-learner-ext');
     $paramRef->{restore_in_progress_text} = string('BLISSMIXEREXT_RESTORE_IN_PROGRESS');
     $paramRef->{restore_success_text} = string('BLISSMIXEREXT_RESTORE_SUCCESS');
