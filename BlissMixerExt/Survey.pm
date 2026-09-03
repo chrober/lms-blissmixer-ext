@@ -59,7 +59,7 @@ sub init {
     $learningOutputPath = $matrixPath . '.new';
 
     # Discover bliss-learner binary (same pattern as Analyser.pm)
-    $learnerBinary = Slim::Utils::Misc::findbin('bliss-learner-ext');
+    $learnerBinary = Slim::Utils::Misc::findbin('bliss-learner');
     main::INFOLOG && $log->info("Learner: ${learnerBinary}") if $learnerBinary;
 
     Slim::Web::Pages->addRawFunction($SURVEY_PAGE_RE, \&_surveyPageHandler);

@@ -4,6 +4,9 @@ use FindBin;
 use Test::More;
 
 BEGIN {
+    package main;
+    sub STATISTICS () { 1 }
+
     package Slim::Web::Settings;
     sub handler { return $_[2] }
     $INC{'Slim/Web/Settings.pm'} = __FILE__;
@@ -30,7 +33,7 @@ BEGIN {
     $INC{'Slim/Utils/Prefs.pm'} = __FILE__;
 
     package Slim::Utils::Misc;
-    sub findbin { return '/test/bliss-learner-ext' }
+    sub findbin { return '/test/bliss-learner' }
     $INC{'Slim/Utils/Misc.pm'} = __FILE__;
 
     package Slim::Utils::Network;
@@ -71,7 +74,7 @@ is(
 my (undef, @preference_names) = Plugins::BlissMixerExt::Settings->prefs();
 is_deeply(
     \@preference_names,
-    [qw(learned_blend triplets_backup_path)],
+    [qw(learned_blend playcount_influence triplets_backup_path)],
     'settings expose only user-meaningful experimental preferences',
 );
 
@@ -86,6 +89,7 @@ ok($request_host{upstream_compatible}, 'compatible upstream is reported');
 is($request_host{upstream_version}, '0.10.0',
     'the displayed upstream version comes from the live loaded manifest');
 ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
+ok($request_host{statistics_enabled}, 'enabled LMS listening statistics are reported');
 is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
     'dynamic JavaScript messages are localized before rendering');
 is($request_host{backup_now_text}, 'localized:BLISSMIXEREXT_BACKUP_NOW',

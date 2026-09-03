@@ -25,7 +25,7 @@ newer.
 ## Installation
 
 Release packages include platform-specific `bliss-mixer-ext` and
-`bliss-learner-ext` executables. Install the appropriate release through the LMS
+`bliss-learner` executables. Install the appropriate release through the LMS
 plugin manager or extract it into the LMS plugins directory, then restart LMS.
 
 For development, place or symlink the `BlissMixerExt` directory in the LMS
@@ -44,11 +44,17 @@ Metric learning reports its live start time, elapsed duration, and current
 native training phase on the settings page. The installed upstream BlissMixer
 version shown under Companion status is read from LMS's loaded plugin manifest.
 
+The experimental play-count influence can favor either less-played or
+frequently played tracks while preserving acoustic similarity as a ranking
+signal. It uses LMS's built-in listening statistics, which are enabled by
+default. If LMS was started with `--nostatistics`, remove that command-line
+option and restart the server; there is no corresponding web setting.
+
 ## Compatibility and isolation
 
 The sidecar deliberately does not register an analyser, importer, Bliss Mixer
 URL protocol, or replacement context-menu handlers. Its mixer listens only on a
-separate configurable loopback port (default `12001`). It checks whether the
+separate automatically selected loopback port. It checks whether the
 upstream analyser is active and reloads its mixer when `bliss.db` changes.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the staging and migration model.

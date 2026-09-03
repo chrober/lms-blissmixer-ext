@@ -30,13 +30,15 @@ required = {
     "upstream preference reader": "preferences('plugin.blissmixer')",
     "separate DSTM handler": "BLISSMIXEREXT_DSTM",
     "separate mixer binary": "findbin('bliss-mixer-ext')",
-    "separate learner binary": "findbin('bliss-learner-ext')",
+    "canonical learner binary": "findbin('bliss-learner')",
     "loopback-only mixer": 'push @params, "127.0.0.1"',
     "automatic loopback port selection": "_availableMixerPort",
     "canonical learned matrix": "'learned_matrix.json'",
     "canonical training triplets": "'training_triplets.json'",
     "legacy data migration": "_migrateLearningFile",
     "sidecar learner notifications": '"--lms-command", "blissmixerext"',
+    "runtime statistics gate": "return 0 unless _statisticsEnabled()",
+    "shared Last.fm/play-count pool": "_candidatePoolMultiplier",
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source:
@@ -56,12 +58,19 @@ if 'blissmixer-triplets-${ts}.zip' not in survey_source:
 
 settings = (PLUGIN / "HTML/EN/plugins/BlissMixerExt/settings/blissmixerext.html").read_text(encoding="utf-8")
 for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):
-    if upstream_pref not in {"learned_blend", "triplets_backup_path"}:
+    if upstream_pref not in {"learned_blend", "playcount_influence", "triplets_backup_path"}:
         fail(f"settings page duplicates upstream preference: {upstream_pref}")
 if 'name="pref_mixer_port"' in settings:
     fail("settings page must not expose the sidecar's internal mixer port")
 if "sliderInput_0_100_1" not in settings:
     fail("learned matrix influence must use the LMS slider control")
+if "sliderInput_-100_100_5" not in settings:
+    fail("play-count influence must use the bidirectional LMS slider control")
+if not re.search(r'id="playcount_influence"[^>]+\[% UNLESS statistics_enabled %\]disabled', settings):
+    fail("play-count influence slider must be disabled without LMS statistics")
+for section in ("mix-section", "learning-section"):
+    if f'id="{section}-header"' not in settings or f'id="{section}"' not in settings:
+        fail(f"settings page is missing the {section} grouping")
 if not re.search(
     r'<input type="text" class="stdedit selectFolder" '
     r'name="pref_triplets_backup_path" id="triplets_backup_path" '
@@ -87,6 +96,8 @@ if "protectName('BLISSMIXEREXT')" not in settings_source:
     fail("settings menu name must use the BLISSMIXEREXT localization token")
 if "$paramRef->{host}" not in settings_source:
     fail("settings JSON-RPC URL must prefer the browser-facing LMS request host")
+if "$paramRef->{statistics_enabled} = main::STATISTICS ? 1 : 0" not in settings_source:
+    fail("settings must expose live LMS statistics availability")
 
 strings_path = PLUGIN / "strings.txt"
 strings_source = strings_path.read_text(encoding="utf-8")

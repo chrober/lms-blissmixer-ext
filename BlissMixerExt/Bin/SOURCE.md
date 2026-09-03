@@ -10,13 +10,13 @@ consume checksum-verified assets from the native component repositories.
 
 The plugin release workflow downloads the five platform assets and their
 `.sha256` files from each release, verifies them, and installs them under these
-Ext-specific names:
+the Ext-specific mixer name and the learner's canonical name:
 
-- `x86_64-linux/bliss-mixer-ext` and `bliss-learner-ext`
-- `aarch64-linux/bliss-mixer-ext` and `bliss-learner-ext`
-- `armhf-linux/bliss-mixer-ext` and `bliss-learner-ext`
-- `mac/bliss-mixer-ext` and `bliss-learner-ext`
-- `windows/bliss-mixer-ext.exe` and `bliss-learner-ext.exe`
+- `x86_64-linux/bliss-mixer-ext` and `bliss-learner`
+- `aarch64-linux/bliss-mixer-ext` and `bliss-learner`
+- `armhf-linux/bliss-mixer-ext` and `bliss-learner`
+- `mac/bliss-mixer-ext` and `bliss-learner`
+- `windows/bliss-mixer-ext.exe` and `bliss-learner.exe`
 
 Update and commit the release tags and source commits together before publishing
 a plugin version with newer native components.

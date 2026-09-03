@@ -30,7 +30,7 @@ sub page {
 }
 
 sub prefs {
-    return ($prefs, 'learned_blend', 'triplets_backup_path');
+    return ($prefs, 'learned_blend', 'playcount_influence', 'triplets_backup_path');
 }
 
 sub beforeRender {
@@ -49,7 +49,8 @@ sub beforeRender {
         && Slim::Utils::Versions->compareVersions($manifest->{version} || '0', '0.10.0') >= 0 ? 1 : 0;
     $paramRef->{database_exists} = -e File::Spec->catfile($dbDir, 'bliss.db') ? 1 : 0;
     $paramRef->{matrix_exists} = -e File::Spec->catfile($dbDir, 'learned_matrix.json') ? 1 : 0;
-    $paramRef->{no_learner_binary} = !Slim::Utils::Misc::findbin('bliss-learner-ext');
+    $paramRef->{statistics_enabled} = main::STATISTICS ? 1 : 0;
+    $paramRef->{no_learner_binary} = !Slim::Utils::Misc::findbin('bliss-learner');
     $paramRef->{learning_start_text} = string('BLISSMIXEREXT_LEARNING_START_TIME');
     $paramRef->{learning_duration_text} = string('BLISSMIXEREXT_LEARNING_DURATION');
     $paramRef->{learning_status_text} = string('BLISSMIXEREXT_LEARNING_STATUS');

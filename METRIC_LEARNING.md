@@ -3,11 +3,11 @@
 The similarity survey presents three randomly selected analysed tracks. The
 listener chooses the odd track out, producing a triplet where two tracks are
 similar and the third is dissimilar. Triplets are stored by relative filename
-in `blissmixer-ext-triplets.json`.
+in `training_triplets.json`.
 
-After at least ten triplets have been collected, `bliss-learner-ext` reads the
+After at least ten triplets have been collected, `bliss-learner` reads the
 upstream `bliss.db` and trains a 23-by-23 Mahalanobis distance matrix. Training
-first writes `blissmixer-ext-matrix.json.new`; BlissMixerExt activates it only
+first writes `learned_matrix.json.new`; BlissMixerExt activates it only
 after the learner exits with a produced result.
 
 At mixer startup, `bliss-mixer-ext` receives the matrix through `--matrix`. For

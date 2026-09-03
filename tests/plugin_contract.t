@@ -13,6 +13,7 @@ BEGIN {
     sub WEBUI () { 0 }
     sub ISWINDOWS () { 0 }
     sub ISMAC () { 0 }
+    sub STATISTICS () { 1 }
 
     package TestPrefs;
     our %values = (
@@ -29,6 +30,7 @@ BEGIN {
         },
         'plugin.blissmixerext' => {
             learned_blend => 50,
+            playcount_influence => 0,
         },
     );
     sub get { return $values{$_[0]->{name}}{$_[1]} }
@@ -124,6 +126,21 @@ BEGIN {
     sub registerHandler { push @registered, [$_[1], $_[2]] }
     sub unregisterHandler { return }
     $INC{'Slim/Plugin/DontStopTheMusic/Plugin.pm'} = __FILE__;
+
+    package TestTrack;
+    sub new {
+        my ($class, $url, $playcount, $artist, $title) = @_;
+        return bless {
+            url => $url,
+            playcount => $playcount,
+            artist => $artist || 'Artist',
+            title => $title || $url,
+        }, $class;
+    }
+    sub url { return $_[0]->{url} }
+    sub playcount { return $_[0]->{playcount} }
+    sub artistName { return $_[0]->{artist} }
+    sub title { return $_[0]->{title} }
 }
 
 use lib "$FindBin::Bin/..";
@@ -197,6 +214,72 @@ is(Plugins::BlissMixerExt::Plugin::_lastfmEndorsedWeightForPercent(50, 0, 8), 1,
     'an empty endorsed set keeps neutral weighting');
 is(Plugins::BlissMixerExt::Plugin::_lastfmNormalizeArtist('  The Artist  '), 'the artist',
     'Last.fm artist keys are normalized consistently');
+
+$TestPrefs::values{'plugin.blissmixerext'}{playcount_influence} = 55;
+is(Plugins::BlissMixerExt::Plugin::_playCountInfluence(), 55,
+    'configured play-count influence is available when LMS statistics are enabled');
+$TestPrefs::values{'plugin.blissmixerext'}{playcount_influence} = 123;
+is(Plugins::BlissMixerExt::Plugin::_playCountInfluence(), 100,
+    'play-count influence is clamped at the positive limit');
+{
+    no warnings 'redefine';
+    local *Plugins::BlissMixerExt::Plugin::_statisticsEnabled = sub { return 0 };
+    is(Plugins::BlissMixerExt::Plugin::_playCountInfluence(), 0,
+        'play-count influence is inactive when LMS listening statistics are disabled');
+}
+is(Plugins::BlissMixerExt::Plugin::_playCountPoolMultiplier(0), 1,
+    'disabled play-count influence does not expand the candidate pool');
+is(Plugins::BlissMixerExt::Plugin::_playCountPoolMultiplier(5), 2,
+    'any non-zero play-count influence expands the candidate pool');
+is(Plugins::BlissMixerExt::Plugin::_playCountPoolMultiplier(-100), 10,
+    'maximum negative influence uses the maximum candidate pool');
+is(Plugins::BlissMixerExt::Plugin::_playCountPoolMultiplier(100), 10,
+    'maximum positive influence uses the maximum candidate pool');
+is(Plugins::BlissMixerExt::Plugin::_candidatePoolMultiplier(1, 100), 10,
+    'Last.fm and play count share one 10x pool instead of multiplying pools');
+cmp_ok(
+    Plugins::BlissMixerExt::Plugin::_playCountWeight(1, 100),
+    '>',
+    Plugins::BlissMixerExt::Plugin::_playCountWeight(-1, 100),
+    'positive influence gives frequently played tracks more weight',
+);
+cmp_ok(
+    Plugins::BlissMixerExt::Plugin::_playCountWeight(-1, -100),
+    '>',
+    Plugins::BlissMixerExt::Plugin::_playCountWeight(1, -100),
+    'negative influence gives less-played tracks more weight',
+);
+
+my @playcount_tracks = (
+    TestTrack->new('low', 0),
+    TestTrack->new('middle', 5),
+    TestTrack->new('high', 100),
+);
+is_deeply(
+    Plugins::BlissMixerExt::Plugin::_selectWeightedCandidates(
+        \@playcount_tracks, 1, 100, undef, undef, sub { 0.5 },
+    ),
+    ['high'],
+    'positive influence can promote a frequently played candidate over Bliss rank',
+);
+is_deeply(
+    Plugins::BlissMixerExt::Plugin::_selectWeightedCandidates(
+        \@playcount_tracks, 1, -100, undef, undef, sub { 0.5 },
+    ),
+    ['low'],
+    'negative influence keeps a less-played candidate ahead',
+);
+my @equal_playcount_tracks = (
+    TestTrack->new('first', 0),
+    TestTrack->new('second', undef),
+);
+is_deeply(
+    Plugins::BlissMixerExt::Plugin::_selectWeightedCandidates(
+        \@equal_playcount_tracks, 1, 100, undef, undef, sub { 0.5 },
+    ),
+    ['first'],
+    'missing and zero play counts are equivalent and preserve Bliss order',
+);
 
 is_deeply(
     Plugins::BlissMixerExt::Plugin::_genreGroups(),

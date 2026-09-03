@@ -22,14 +22,35 @@ BLISSMIXEREXT_DATABASE_OK
 BLISSMIXEREXT_DATABASE_MISSING
 	EN	No bliss.db was found. Run analysis from the upstream BlissMixer settings first.
 
+BLISSMIXEREXT_STATISTICS_OK
+	EN	Lyrion listening statistics are enabled; play counts are available.
+
+BLISSMIXEREXT_STATISTICS_UNAVAILABLE
+	EN	Lyrion listening statistics are disabled, so play counts are unavailable. Remove the --nostatistics server startup option and restart Lyrion to enable them.
+
 BLISSMIXEREXT_SETTINGS_NOTE
 	EN	BlissMixerExt uses the mixer, filter, seed, genre, and Last.fm settings from upstream BlissMixer. Only experimental settings are shown here.
+
+BLISSMIXEREXT_MIX_SETTINGS
+	EN	Experimental mix settings
+
+BLISSMIXEREXT_MIX_SETTINGS_NOTE
+	EN	These settings extend the candidate selection produced by Bliss Mixer.
 
 BLISSMIXEREXT_LEARNED_BLEND
 	EN	Learned matrix influence
 
 BLISSMIXEREXT_LEARNED_BLEND_DESC
 	EN	For multiple adaptive-weighting seeds, controls how strongly the learned matrix influences similarity. 0 is variance only; 100 is learned matrix only. A single seed uses the learned matrix directly.
+
+BLISSMIXEREXT_PLAYCOUNT_INFLUENCE
+	EN	Play-count influence
+
+BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_DESC
+	EN	Controls how listening history reranks Bliss candidates. Negative values prefer less-played tracks, 0 disables reranking, and positive values prefer frequently played tracks. Greater absolute values consider a larger candidate pool; Last.fm and play count share the same pool when both are active.
+
+BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_UNAVAILABLE
+	EN	This setting requires Lyrion listening statistics. They are disabled when the server is started with --nostatistics.
 
 BLISSMIXEREXT_LEARNING
 	EN	Metric learning
@@ -38,7 +59,7 @@ BLISSMIXEREXT_LEARNING_NOTE
 	EN	Complete similarity surveys, then train a personal distance matrix. The previous matrix remains active if an experimental training run fails.
 
 BLISSMIXEREXT_LEARNER_NOT_FOUND
-	EN	The bliss-learner-ext executable was not found.
+	EN	The bliss-learner executable was not found.
 
 BLISSMIXEREXT_OPEN_SURVEY
 	EN	Open Similarity Survey

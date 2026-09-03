@@ -148,19 +148,19 @@ jobs:
           (cd native/mixer && sha256sum -c *.sha256)
           (cd native/learner && sha256sum -c *.sha256)
 
-      - name: Install Ext-named binaries into plugin tree
+      - name: Install plugin binaries into plugin tree
         run: |
           set -euo pipefail
           install -m 0755 -D native/mixer/bliss-mixer-x86_64-linux BlissMixerExt/Bin/x86_64-linux/bliss-mixer-ext
-          install -m 0755 -D native/learner/bliss-learner-x86_64-linux BlissMixerExt/Bin/x86_64-linux/bliss-learner-ext
+          install -m 0755 -D native/learner/bliss-learner-x86_64-linux BlissMixerExt/Bin/x86_64-linux/bliss-learner
           install -m 0755 -D native/mixer/bliss-mixer-aarch64-linux BlissMixerExt/Bin/aarch64-linux/bliss-mixer-ext
-          install -m 0755 -D native/learner/bliss-learner-aarch64-linux BlissMixerExt/Bin/aarch64-linux/bliss-learner-ext
+          install -m 0755 -D native/learner/bliss-learner-aarch64-linux BlissMixerExt/Bin/aarch64-linux/bliss-learner
           install -m 0755 -D native/mixer/bliss-mixer-armhf-linux BlissMixerExt/Bin/armhf-linux/bliss-mixer-ext
-          install -m 0755 -D native/learner/bliss-learner-armhf-linux BlissMixerExt/Bin/armhf-linux/bliss-learner-ext
+          install -m 0755 -D native/learner/bliss-learner-armhf-linux BlissMixerExt/Bin/armhf-linux/bliss-learner
           install -m 0755 -D native/mixer/bliss-mixer-mac BlissMixerExt/Bin/mac/bliss-mixer-ext
-          install -m 0755 -D native/learner/bliss-learner-mac BlissMixerExt/Bin/mac/bliss-learner-ext
+          install -m 0755 -D native/learner/bliss-learner-mac BlissMixerExt/Bin/mac/bliss-learner
           install -m 0644 -D native/mixer/bliss-mixer-windows.exe BlissMixerExt/Bin/windows/bliss-mixer-ext.exe
-          install -m 0644 -D native/learner/bliss-learner-windows.exe BlissMixerExt/Bin/windows/bliss-learner-ext.exe
+          install -m 0644 -D native/learner/bliss-learner-windows.exe BlissMixerExt/Bin/windows/bliss-learner.exe
 
       - name: Package platform plugin archives
         id: package
@@ -202,9 +202,9 @@ jobs:
         run: |
           set -euo pipefail
           unzip -l "dist/$LINUX_ASSET" | grep 'BlissMixerExt/Bin/x86_64-linux/bliss-mixer-ext'
-          unzip -l "dist/$LINUX_ASSET" | grep 'BlissMixerExt/Bin/aarch64-linux/bliss-learner-ext'
+          unzip -l "dist/$LINUX_ASSET" | grep 'BlissMixerExt/Bin/aarch64-linux/bliss-learner'
           unzip -l "dist/$MAC_ASSET" | grep 'BlissMixerExt/Bin/mac/bliss-mixer-ext'
-          unzip -l "dist/$WINDOWS_ASSET" | grep 'BlissMixerExt/Bin/windows/bliss-learner-ext.exe'
+          unzip -l "dist/$WINDOWS_ASSET" | grep 'BlissMixerExt/Bin/windows/bliss-learner.exe'
           if unzip -Z1 "dist/$MAC_ASSET" | grep -Eq 'Bin/(windows|x86_64-linux|aarch64-linux|armhf-linux)/'; then exit 1; fi
           if unzip -Z1 "dist/$WINDOWS_ASSET" | grep -Eq 'Bin/(mac|x86_64-linux|aarch64-linux|armhf-linux)/'; then exit 1; fi
 

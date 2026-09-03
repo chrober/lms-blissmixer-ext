@@ -50,7 +50,7 @@ BEGIN {
     $INC{'Slim/Utils/Log.pm'} = __FILE__;
 
     package Slim::Utils::Misc;
-    our $learner_binary = '/test/bliss-learner-ext';
+    our $learner_binary = '/test/bliss-learner';
     sub findbin { return $learner_binary }
     $INC{'Slim/Utils/Misc.pm'} = __FILE__;
 

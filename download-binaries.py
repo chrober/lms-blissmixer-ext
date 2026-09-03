@@ -31,11 +31,11 @@ COMPONENTS = {
         "repo": "chrober/bliss-learner",
         "label": "Learner release",
         "assets": {
-            "bliss-learner-x86_64-linux": "x86_64-linux/bliss-learner-ext",
-            "bliss-learner-aarch64-linux": "aarch64-linux/bliss-learner-ext",
-            "bliss-learner-armhf-linux": "armhf-linux/bliss-learner-ext",
-            "bliss-learner-mac": "mac/bliss-learner-ext",
-            "bliss-learner-windows.exe": "windows/bliss-learner-ext.exe",
+            "bliss-learner-x86_64-linux": "x86_64-linux/bliss-learner",
+            "bliss-learner-aarch64-linux": "aarch64-linux/bliss-learner",
+            "bliss-learner-armhf-linux": "armhf-linux/bliss-learner",
+            "bliss-learner-mac": "mac/bliss-learner",
+            "bliss-learner-windows.exe": "windows/bliss-learner.exe",
         },
     },
 }

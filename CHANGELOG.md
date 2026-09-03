@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 - 2026-09-03
+
+- Add a bidirectional play-count influence setting: negative values favor
+  less-played tracks and positive values favor frequently played tracks.
+- Expand the Bliss candidate pool progressively with the absolute play-count
+  influence, while sharing Last.fm's existing 10x pool when both are enabled.
+- Disable play-count influence when LMS was started with `--nostatistics` and
+  explain how listening statistics are enabled.
+- Group experimental mix settings and metric-learning controls into distinct,
+  collapsible settings sections.
+- Install the learner under its canonical `bliss-learner` name; only the mixer
+  needs an Ext-specific filename for side-by-side process isolation.
+
 ## 0.1.6 - 2026-09-03
 
 - Show the same live metric-learning details as BlissMixer: start time,

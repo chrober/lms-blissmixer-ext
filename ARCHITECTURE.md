@@ -12,7 +12,7 @@ registrations.
 | Stable mix preferences | Owner | Reads on every request |
 | Experimental preferences | None | Owner |
 | Mixer process | `bliss-mixer` | `bliss-mixer-ext` |
-| Learning process | None | `bliss-learner-ext` |
+| Learning process | None | `bliss-learner` |
 | DSTM provider | `Bliss` | `Bliss (Ext)` |
 | Survey, triplets, learned matrix | None | Owner |
 
@@ -20,8 +20,8 @@ The two preference namespaces are deliberately separate:
 
 - `plugin.blissmixer` supplies filters, repeat limits, weights, seed strategy,
   genre groups, DSTM count, and Last.fm behavior.
-- `plugin.blissmixerext` supplies only the sidecar port, learned blend, and
-  training-data backup path.
+- `plugin.blissmixerext` supplies only the learned blend, play-count influence,
+  and training-data backup path.
 
 ## Database lifecycle
 
@@ -35,10 +35,12 @@ No Ext code starts an analyser or opens the database for writes.
 
 ## Binary isolation
 
-The experimental executables have unique installed filenames. The mixer binds
-to `127.0.0.1` on a fixed Ext-owned port, avoiding the experimental binary's
-upstream-specific dynamic-port callback. The learner is monitored as a local
-child process and does not send notifications to the upstream CLI endpoint.
+The experimental mixer has a unique installed filename. It binds to
+`127.0.0.1` on an automatically selected Ext-owned port, avoiding the
+experimental binary's upstream-specific dynamic-port callback. The learner has
+the canonical `bliss-learner` name because upstream Bliss Mixer has no learner
+binary with which it could conflict. It is monitored as a local child process
+and does not send notifications to the upstream CLI endpoint.
 
 Learning writes to a temporary matrix. The active matrix is replaced only when
 the learner produces a new result, preserving the previous model after a failed
