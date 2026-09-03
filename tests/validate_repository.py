@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -144,6 +145,28 @@ for requirement in (
 ):
     if requirement not in release_workflow:
         fail(f"release workflow is missing: {requirement}")
+
+drift_config = json.loads((ROOT / "compat/dstm-drift.json").read_text(encoding="utf-8"))
+if drift_config.get("upstream_repository") != "CDrummond/lms-blissmixer":
+    fail("DSTM drift check must follow the original BlissMixer repository")
+if not re.fullmatch(r"[0-9a-f]{40}", drift_config.get("reviewed_upstream_commit", "")):
+    fail("DSTM drift check must pin a full reviewed upstream commit")
+if "_dstmMix" not in drift_config.get("adapted_from_upstream", []):
+    fail("DSTM drift check must track the adapted _dstmMix routine")
+if "_getMixData" not in drift_config.get("adapted_from_upstream", []):
+    fail("DSTM drift check must track the adapted _getMixData routine")
+
+drift_workflow = (ROOT / ".github/workflows/dstm-drift.yml").read_text(encoding="utf-8")
+for requirement in (
+    "schedule:",
+    "scripts/check_dstm_drift.py",
+    "upstream-blissmixer",
+    "dstm-drift-report.md",
+    "Create or update scheduled drift issue",
+    "Enforce drift result",
+):
+    if requirement not in drift_workflow:
+        fail(f"DSTM drift workflow is missing: {requirement}")
 
 source_manifest = (PLUGIN / "Bin/SOURCE.md").read_text(encoding="utf-8")
 for label in ("Mixer release", "Mixer commit", "Learner release", "Learner commit"):

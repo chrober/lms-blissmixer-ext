@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "upstream_repository": "CDrummond/lms-blissmixer",
+  "upstream_ref": "master",
+  "upstream_plugin_path": "BlissMixer/Plugin.pm",
+  "reviewed_upstream_commit": "77e12249c48297f2c4498a0b20ada6a72e1c911f",
+  "extension_plugin_path": "BlissMixerExt/Plugin.pm",
+  "direct_mirrors": [
+    "_weightParam",
+    "_getMixableProperties",
+    "_mixerNotAvailable",
+    "_startsWith",
+    "_trackToPath",
+    "_selectViaLastFm",
+    "_lastfmEndorsedWeightForPercent",
+    "_fetchSimilarArtistsForSeeds",
+    "_lastfmNormalizeArtist",
+    "_mixFailed",
+    "_getPreviousTracks",
+    "_fireComparisonQueue",
+    "_genreGroups"
+  ],
+  "adapted_from_upstream": [
+    "postinitPlugin",
+    "_pathToTrack",
+    "_dstmMix",
+    "_getMixData",
+    "_buildComparisonJson"
+  ],
+  "identity_normalizations": [
+    ["Plugins::BlissMixerExt", "Plugins::BlissMixer"],
+    ["BLISSMIXEREXT", "BLISSMIXER"],
+    ["blissmixerext", "blissmixer"]
+  ],
+  "intentional_adaptations": {
+    "postinitPlugin": "Registers Bliss (Ext) independently and applies the upstream compatibility gate.",
+    "_pathToTrack": "Carries the sidecar's Windows path existence fix until it is present upstream.",
+    "_dstmMix": "Owns the sidecar process and adds learned-matrix selection, blend handling, and experimental diagnostics.",
+    "_getMixData": "Adds the learnedblend request property.",
+    "_buildComparisonJson": "Adds learnedblend overrides used by experimental comparison diagnostics."
+  }
+}

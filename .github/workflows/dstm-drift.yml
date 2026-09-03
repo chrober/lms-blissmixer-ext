@@ -1,0 +1,123 @@
+name: BlissMixer DSTM drift
+
+on:
+  pull_request:
+    paths:
+      - BlissMixerExt/Plugin.pm
+      - compat/dstm-drift.json
+      - scripts/check_dstm_drift.py
+      - tests/test_dstm_drift.py
+      - .github/workflows/dstm-drift.yml
+  push:
+    branches: [main]
+    paths:
+      - BlissMixerExt/Plugin.pm
+      - compat/dstm-drift.json
+      - scripts/check_dstm_drift.py
+      - tests/test_dstm_drift.py
+      - .github/workflows/dstm-drift.yml
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dstm-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out BlissMixerExt
+        uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read upstream checkout settings
+        id: config
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("compat/dstm-drift.json").read_text())
+          print(f"repository={config['upstream_repository']}")
+          print(f"ref={config['upstream_ref']}")
+          PY
+
+      - name: Check out current upstream BlissMixer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.config.outputs.repository }}
+          ref: ${{ steps.config.outputs.ref }}
+          fetch-depth: 0
+          path: upstream-blissmixer
+
+      - name: Test the drift detector
+        run: python -m unittest tests.test_dstm_drift
+
+      - name: Compare DSTM implementations
+        id: comparison
+        continue-on-error: true
+        run: |
+          python scripts/check_dstm_drift.py \
+            --upstream-dir upstream-blissmixer \
+            --report dstm-drift-report.md
+
+      - name: Add report to workflow summary
+        if: always()
+        run: cat dstm-drift-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update scheduled drift issue
+        if: github.event_name == 'schedule' && steps.comparison.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "[automation] BlissMixer DSTM drift requires review"
+        shell: bash
+        run: |
+          issue_number="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "in:title $ISSUE_TITLE" \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body-file dstm-drift-report.md
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$ISSUE_TITLE" \
+              --body-file dstm-drift-report.md
+          fi
+
+      - name: Close resolved scheduled drift issue
+        if: github.event_name == 'schedule' && steps.comparison.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "[automation] BlissMixer DSTM drift requires review"
+        shell: bash
+        run: |
+          issue_number="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "in:title $ISSUE_TITLE" \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [[ -n "$issue_number" ]]; then
+            gh issue close "$issue_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --comment "The scheduled DSTM drift check is clean again."
+          fi
+
+      - name: Enforce drift result
+        if: steps.comparison.outcome == 'failure'
+        run: exit 1

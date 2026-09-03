@@ -58,3 +58,19 @@ When an experiment is accepted upstream:
 2. Migrate any Ext preference or data that users should retain.
 3. Remove the graduated setting and implementation from Ext.
 4. Stop registering `Bliss (Ext)` when it no longer provides distinct behavior.
+
+## Upstream DSTM drift
+
+`compat/dstm-drift.json` records the upstream commit against which the adapted
+DSTM routines were last reviewed. It also separates direct mirrors from
+intentional adaptations. `.github/workflows/dstm-drift.yml` checks both parts:
+
+- Direct mirrors are compared between current upstream and BlissMixerExt after
+  removing comments, layout, and the expected plugin-identity differences.
+- Intentional adaptations are compared between current upstream and the recorded
+  reviewed upstream commit, so a new upstream change cannot be hidden by the
+  sidecar's existing learned-matrix differences.
+
+The workflow reports changed routines rather than a noisy whole-file diff. Its
+scheduled run maintains one review issue until all significant drift has been
+resolved and the reviewed commit has deliberately been advanced.

@@ -61,6 +61,18 @@ upstream compatibility gate, DSTM identity and port isolation, inherited mixer
 preferences, survey persistence and backup/restore, and learned-matrix
 replacement behavior. Release publication runs the same test gate.
 
+The separate `BlissMixer DSTM drift` workflow checks the current upstream
+implementation every Monday and whenever the DSTM implementation or drift
+configuration changes. Directly cloned routines must remain token-equivalent
+after plugin-identity normalization. Intentionally adapted routines are compared
+with the last reviewed upstream commit. Significant changes fail the workflow;
+scheduled failures create or update a single review issue with per-routine
+diffs.
+
+After reviewing an upstream change, incorporate or intentionally reject each
+relevant change and then advance `reviewed_upstream_commit` in
+`compat/dstm-drift.json`. Do not advance the commit merely to silence the check.
+
 On a Debian-based development system, run the complete plugin suite with
 `prove -l tests` after installing the Perl dependencies listed in
 `.github/workflows/validate.yml`.
