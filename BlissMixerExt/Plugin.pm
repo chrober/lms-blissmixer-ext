@@ -29,6 +29,7 @@ use Slim::Utils::Versions;
 
 use Plugins::BlissMixerExt::Settings;
 use Plugins::BlissMixerExt::Survey;
+use Plugins::BlissMixerExt::LastFmTrackSimilarity;
 
 use constant DEF_NUM_DSTM_TRACKS => 5;
 use constant NUM_FOREST_SEED_TRACKS => 10;
@@ -41,6 +42,7 @@ use constant MAX_MIXER_START_CHECKS => 10;
 use constant FIRST_MIXER_PORT => 12001;
 use constant LAST_MIXER_PORT => 12100;
 use constant MIN_BLISSMIXER_VERSION => '0.10.0';
+use constant LASTFM_EVIDENCE_TIMEOUT => 8;
 
 my $log = Slim::Utils::Log->addLogCategory({
     'category'     => 'plugin.blissmixerext',
@@ -90,6 +92,7 @@ sub initPlugin {
     $extprefs->init({
         learned_blend    => 50,
         playcount_influence => 0,
+        lastfm_track_guidance_percent => 25,
         triplets_backup_path => ''
     });
 
@@ -695,6 +698,8 @@ sub _dstmMix {
             my $dstm_tracks = $prefs->get('dstm_tracks') || DEF_NUM_DSTM_TRACKS;
             my $lastfmWeighting = $useAdaptiveWeights && $prefs->get('use_lastfm_weighting')
                 && exists $INC{'Plugins/LastMix/LFM.pm'};
+            my $lastfmTrackGuidance = $lastfmWeighting
+                ? _lastfmTrackGuidance() : 0;
             my $playCountInfluence = _playCountInfluence();
             my $playCountWeighting = $playCountInfluence != 0;
             my $poolMultiplier = _candidatePoolMultiplier(
@@ -861,7 +866,7 @@ sub _dstmMix {
                                 _selectViaLastFm(\@seedsToUse, \@trackObjs, $dstm_tracks, sub {
                                     my $weightedUrls = shift;
                                     $cb->($client, $weightedUrls);
-                                }, $playCountInfluence);
+                                }, $playCountInfluence, $lastfmTrackGuidance);
                             } elsif ($playCountWeighting) {
                                 my $weightedUrls = _selectWeightedCandidates(
                                     \@trackObjs, $dstm_tracks, $playCountInfluence
@@ -925,8 +930,9 @@ sub _dstmMix {
 }
 
 sub _selectViaLastFm {
-    my ($seeds, $trackObjs, $finalCount, $cb, $playCountInfluence) = @_;
+    my ($seeds, $trackObjs, $finalCount, $cb, $playCountInfluence, $trackGuidance) = @_;
     $playCountInfluence ||= 0;
+    $trackGuidance ||= 0;
 
     my @seedInfo;
     my %lastfmArtists;
@@ -943,19 +949,45 @@ sub _selectViaLastFm {
         unless ($seenArtists{$key}++) {
             push @seedInfo, {
                 artist      => $seed->artistName,
-                artist_mbid => ($seed->artist ? $seed->artist->musicbrainz_id : undef),
+                artist_mbid => eval {
+                    $seed->artist ? $seed->artist->musicbrainz_id : undef
+                },
             };
         }
     }
 
-    _fetchSimilarArtistsForSeeds([@seedInfo], \%lastfmArtists, sub {
-        my ($hadError, $stats) = @_;
-        $stats ||= {};
+    my $artistStats = {succeeded => 0, failed => 0};
+    my $trackStats = {succeeded => 0, failed => 0, error_codes => []};
+    my $trackMatches = {mbid => {}, name => {}};
+    my $artistDone = 0;
+    my $trackDone = $trackGuidance ? 0 : 1;
+    my $completed = 0;
+    my $timedOut = 0;
+    my $timerOwner = {};
+    my ($finish, $deadline);
 
-        if ($hadError) {
+    $finish = sub {
+        return if $completed || !$artistDone || !$trackDone;
+        $completed = 1;
+        Slim::Utils::Timers::killTimers($timerOwner, $deadline);
+
+        if ($timedOut) {
+            $log->warn('Last.fm evidence deadline reached; using the available partial result');
+        }
+        if (main::INFOLOG && (($artistStats->{failed} || 0) + ($trackStats->{failed} || 0)) > 0) {
+            $log->info(sprintf(
+                'Last.fm partial result: artist lookups %d succeeded/%d failed, track lookups %d succeeded/%d failed',
+                $artistStats->{succeeded} || 0, $artistStats->{failed} || 0,
+                $trackStats->{succeeded} || 0, $trackStats->{failed} || 0,
+            ));
+        }
+
+        my $hadSuccess = ($artistStats->{succeeded} || 0)
+            + ($trackStats->{succeeded} || 0);
+        unless ($hadSuccess) {
             if ($playCountInfluence) {
                 main::INFOLOG && $log->info(
-                    "Last.fm API error: continuing with play-count influence $playCountInfluence"
+                    "Last.fm unavailable: continuing with play-count influence $playCountInfluence"
                 );
                 $cb->(_selectWeightedCandidates(
                     $trackObjs, $finalCount, $playCountInfluence
@@ -965,7 +997,7 @@ sub _selectViaLastFm {
             my $poolSize = scalar @$trackObjs;
             my $end = ($finalCount - 1 < $#{$trackObjs}) ? $finalCount - 1 : $#{$trackObjs};
             if (main::INFOLOG) {
-                $log->info("Last.fm API error: falling back to pure bliss top-$finalCount tracks");
+                $log->info("Last.fm unavailable: falling back to pure bliss top-$finalCount tracks");
                 $log->info(sprintf("Last.fm artist selection: 0 last.fm-endorsed, %d bliss-only in pool of %d (target=%d%%) -> selected %d",
                     $poolSize, $poolSize, $targetPercent, $end + 1));
                 for my $i (0 .. $end) {
@@ -978,72 +1010,121 @@ sub _selectViaLastFm {
             return;
         }
 
-        if (main::INFOLOG && ($stats->{failed} || 0) > 0) {
-            my $ok = $stats->{succeeded} || 0;
-            my $failed = $stats->{failed} || 0;
-            $log->info("Last.fm partial result: $ok seed lookups succeeded, $failed failed; using collected endorsements");
-        }
-
         main::INFOLOG && $log->info("Last.fm: " . scalar(keys %lastfmArtists) . " endorsed artists (incl. seed artists)");
 
-        if ($playCountInfluence) {
+        if ($playCountInfluence || $trackGuidance) {
             $cb->(_selectWeightedCandidates(
                 $trackObjs,
                 $finalCount,
                 $playCountInfluence,
                 \%lastfmArtists,
                 $targetPercent,
+                undef,
+                $trackMatches,
+                $trackGuidance,
             ));
             return;
         }
 
-        my @weighted;
-        my ($endorsed_count, $rest_count) = (0, 0);
-        my $poolSize = scalar @$trackObjs;
-        for my $i (0 .. $#$trackObjs) {
-            my $trackObj = $trackObjs->[$i];
-            my $artistKey = _lastfmNormalizeArtist($trackObj->artistName);
-            my $endorsed = exists $lastfmArtists{$artistKey};
-            if ($endorsed) { $endorsed_count++ } else { $rest_count++ }
-            push @weighted, { track => $trackObj, endorsed => $endorsed, rank => $i + 1 };
-        }
+        $cb->(_selectArtistWeightedCandidates(
+            $trackObjs, $finalCount, \%lastfmArtists, $targetPercent
+        ));
+    };
 
-        my $endorsedWeight = _lastfmEndorsedWeightForPercent($targetPercent, $endorsed_count, $rest_count);
+    $deadline = sub {
+        return if $completed;
+        $timedOut = 1;
+        $artistDone = 1;
+        $trackDone = 1;
+        $finish->();
+    };
+    Slim::Utils::Timers::setTimer(
+        $timerOwner,
+        Time::HiRes::time() + LASTFM_EVIDENCE_TIMEOUT,
+        $deadline,
+    );
+
+    _fetchSimilarArtistsForSeeds([@seedInfo], \%lastfmArtists, sub {
+        $artistDone = 1;
+        $finish->();
+    }, $artistStats);
+
+    if ($trackGuidance) {
+        Plugins::BlissMixerExt::LastFmTrackSimilarity::collect(
+            $seeds,
+            sub {
+                $trackDone = 1;
+                $finish->();
+            },
+            $trackMatches,
+            $trackStats,
+        );
+    }
+}
+
+sub _selectArtistWeightedCandidates {
+    my ($trackObjs, $finalCount, $lastfmArtists, $targetPercent, $random) = @_;
+    $random ||= sub { rand() };
+
+    my @weighted;
+    my ($endorsed_count, $rest_count) = (0, 0);
+    my $poolSize = scalar @$trackObjs;
+    for my $i (0 .. $#$trackObjs) {
+        my $trackObj = $trackObjs->[$i];
+        my $artistKey = _lastfmNormalizeArtist($trackObj->artistName);
+        my $endorsed = exists $lastfmArtists->{$artistKey};
+        if ($endorsed) { $endorsed_count++ } else { $rest_count++ }
+        push @weighted, { track => $trackObj, endorsed => $endorsed, rank => $i + 1 };
+    }
+
+    my $endorsedWeight = _lastfmEndorsedWeightForPercent(
+        $targetPercent, $endorsed_count, $rest_count
+    );
+    for my $entry (@weighted) {
+        my $weight = $entry->{endorsed} ? $endorsedWeight : 1;
+        my $value = $random->();
+        $value = 0.000000000001 unless defined $value && $value > 0;
+        $value = 1 if $value > 1;
+        $entry->{key} = $value ** (1.0 / $weight);
+    }
+
+    @weighted = sort { $b->{key} <=> $a->{key} } @weighted;
+    splice(@weighted, $finalCount) if $poolSize > $finalCount;
+
+    main::INFOLOG && $log->info(sprintf(
+        "Last.fm artist selection: %d last.fm-endorsed, %d bliss-only in pool of %d (target=%d%%, computed weight=%.3f) -> selected %d",
+        $endorsed_count, $rest_count, scalar @$trackObjs, $targetPercent,
+        $endorsedWeight, scalar @weighted,
+    ));
+
+    if (main::INFOLOG) {
+        my $rankWidth = length("$poolSize");
+        my $maxTierLen = 0;
         for my $entry (@weighted) {
-            my $w = $entry->{endorsed} ? $endorsedWeight : 1;
-            my $key = rand() ** (1.0 / $w);
-            $entry->{key} = $key;
+            my $len = $entry->{endorsed}
+                ? length('last.fm-endorsed') : length('bliss-only');
+            $maxTierLen = $len if $len > $maxTierLen;
         }
-
-        @weighted = sort { $b->{key} <=> $a->{key} } @weighted;
-        splice(@weighted, $finalCount) if $poolSize > $finalCount;
-
-        main::INFOLOG && $log->info(sprintf(
-            "Last.fm artist selection: %d last.fm-endorsed, %d bliss-only in pool of %d (target=%d%%, computed weight=%.3f) -> selected %d",
-            $endorsed_count, $rest_count, scalar @$trackObjs, $targetPercent, $endorsedWeight, scalar @weighted));
-
-        if (main::INFOLOG) {
-            my $rankWidth = length("$poolSize");
-            my $maxTierLen = 0;
-            for my $entry (@weighted) {
-                my $len = $entry->{endorsed} ? length('last.fm-endorsed') : length('bliss-only');
-                $maxTierLen = $len if $len > $maxTierLen;
-            }
-            my $tierWidth = $maxTierLen + 2;  # +2 for one space padding each side
-            foreach my $entry (@weighted) {
-                my $tier = $entry->{endorsed} ? 'last.fm-endorsed' : 'bliss-only';
-                my $pad  = $tierWidth - length($tier);
-                my $lpad = ' ' x int($pad / 2);
-                my $rpad = ' ' x ($pad - int($pad / 2));
-                $log->info(sprintf("  [%s%s%s| similarity-rank %*d/%d ] %s - %s",
-                    $lpad, $tier, $rpad, $rankWidth, $entry->{rank}, $poolSize,
-                    $entry->{track}->artistName, $entry->{track}->title));
-            }
+        my $tierWidth = $maxTierLen + 2;
+        foreach my $entry (@weighted) {
+            my $tier = $entry->{endorsed} ? 'last.fm-endorsed' : 'bliss-only';
+            my $pad  = $tierWidth - length($tier);
+            my $lpad = ' ' x int($pad / 2);
+            my $rpad = ' ' x ($pad - int($pad / 2));
+            $log->info(sprintf("  [%s%s%s| similarity-rank %*d/%d ] %s - %s",
+                $lpad, $tier, $rpad, $rankWidth, $entry->{rank}, $poolSize,
+                $entry->{track}->artistName, $entry->{track}->title));
         }
+    }
 
-        my $urls = [ map { $_->{track}->url } @weighted ];
-        $cb->($urls);
-    });
+    return [map { $_->{track}->url } @weighted];
+}
+
+sub _lastfmTrackGuidance {
+    my $influence = int($extprefs->get('lastfm_track_guidance_percent') // 25);
+    $influence = 0 if $influence < 0;
+    $influence = 100 if $influence > 100;
+    return $influence;
 }
 
 sub _playCountInfluence {
@@ -1121,7 +1202,8 @@ sub _playCountEntries {
 }
 
 sub _selectWeightedCandidates {
-    my ($trackObjs, $finalCount, $playCountInfluence, $lastfmArtists, $lastfmTarget, $random) = @_;
+    my ($trackObjs, $finalCount, $playCountInfluence, $lastfmArtists,
+        $lastfmTarget, $random, $lastfmTracks, $trackGuidance) = @_;
     return [] unless $trackObjs && @$trackObjs;
     $finalCount = int($finalCount || 0);
     $finalCount = scalar @$trackObjs if $finalCount < 1;
@@ -1130,7 +1212,9 @@ sub _selectWeightedCandidates {
     my ($entries, $distinctCounts, $unknownCounts) = _playCountEntries($trackObjs);
     my $effectivePlayCountInfluence = $distinctCounts > 1 ? $playCountInfluence : 0;
 
-    if (!$effectivePlayCountInfluence && !$lastfmArtists) {
+    $trackGuidance ||= 0;
+
+    if (!$effectivePlayCountInfluence && !$lastfmArtists && !$trackGuidance) {
         main::INFOLOG && $log->info(
             'Play-count influence has no usable variation; keeping Bliss candidate order'
         );
@@ -1153,6 +1237,7 @@ sub _selectWeightedCandidates {
         : 1;
 
     my $poolSize = scalar @$entries;
+    my $trackMatchCount = 0;
     for my $entry (@$entries) {
         my $weight = 1;
         if ($effectivePlayCountInfluence) {
@@ -1166,6 +1251,19 @@ sub _selectWeightedCandidates {
             $entry->{play_weight} = $playWeight;
         }
         $weight *= $lastfmWeight if $lastfmArtists && $entry->{endorsed};
+        if ($trackGuidance) {
+            my $trackSupport =
+                Plugins::BlissMixerExt::LastFmTrackSimilarity::candidateSupport(
+                    $entry->{track}, $lastfmTracks
+                );
+            my $trackWeight = _lastfmTrackWeight(
+                $trackSupport, $trackGuidance
+            );
+            $weight *= $trackWeight;
+            $entry->{track_support} = $trackSupport;
+            $entry->{track_weight} = $trackWeight;
+            $trackMatchCount++ if $trackSupport > 0;
+        }
         $entry->{weight} = $weight;
         my $value = $random->();
         $value = 0.000000000001 unless defined $value && $value > 0;
@@ -1183,21 +1281,77 @@ sub _selectWeightedCandidates {
             ? $counts[$middle]
             : (($counts[$middle - 1] + $counts[$middle]) / 2);
         $log->info(sprintf(
-            'Play-count selection: influence=%+d, pool=%d, selecting=%d, counts min/median/max=%d/%.1f/%d, unknown=%d%s',
+            'Combined selection: play-count influence=%+d, pool=%d, selecting=%d, counts min/median/max=%d/%.1f/%d, unknown=%d%s%s',
             $effectivePlayCountInfluence, $poolSize, scalar(@selected),
             $counts[0], $median, $counts[-1], $unknownCounts,
-            $lastfmArtists ? ", Last.fm target=$lastfmTarget%" : '',
+            $lastfmArtists
+                ? ", Last.fm artists=$endorsedCount/$poolSize (target=$lastfmTarget%)"
+                : '',
+            $trackGuidance
+                ? ", Last.fm track guidance=$trackGuidance%, matches=$trackMatchCount"
+                : '',
         ));
-        for my $entry (@selected) {
-            $log->info(sprintf(
-                '  [playcount=%d | similarity-rank %d/%d | weight=%.3f] %s - %s',
-                $entry->{playcount}, $entry->{rank}, $poolSize, $entry->{weight},
-                $entry->{track}->artistName, $entry->{track}->title,
-            ));
-        }
+        $log->info($_) for @{_selectionLogLines(
+            \@selected, $poolSize, $trackGuidance
+        )};
     }
 
     return [map { $_->{track}->url } @selected];
+}
+
+sub _selectionLogLines {
+    my ($selected, $poolSize, $trackGuidance) = @_;
+    my @rows;
+    my @widths;
+    my $rankWidth = length("$poolSize");
+
+    for my $entry (@{$selected || []}) {
+        my $hasTrackMatch = ($entry->{track_support} || 0) > 0;
+        my $tier = $hasTrackMatch
+            ? ($entry->{endorsed} ? 'last.fm-track+artist' : 'last.fm-track')
+            : ($entry->{endorsed} ? 'last.fm-endorsed' : 'bliss-only');
+        my @columns = (
+            $tier,
+            sprintf('playcount=%d', $entry->{playcount} || 0),
+        );
+        push @columns, sprintf(
+            'track-support=%.3f', $entry->{track_support} || 0
+        ) if $trackGuidance;
+        push @columns,
+            sprintf('similarity-rank %*d/%d', $rankWidth, $entry->{rank}, $poolSize),
+            sprintf('weight=%.3f', $entry->{weight});
+        for my $index (0 .. $#columns) {
+            my $length = length($columns[$index]);
+            $widths[$index] = $length
+                if !defined $widths[$index] || $length > $widths[$index];
+        }
+        push @rows, {entry => $entry, columns => \@columns};
+    }
+
+    my @lines;
+    for my $row (@rows) {
+        my @padded;
+        for my $index (0 .. $#{$row->{columns}}) {
+            push @padded, sprintf(
+                '%-*s', $widths[$index], $row->{columns}->[$index]
+            );
+        }
+        my $entry = $row->{entry};
+        push @lines, '  [' . join(' | ', @padded) . '] '
+            . $entry->{track}->artistName . ' - ' . $entry->{track}->title;
+    }
+    return \@lines;
+}
+
+sub _lastfmTrackWeight {
+    my ($support, $guidance) = @_;
+    $support = 0 unless defined $support;
+    $support = 0 if $support < 0;
+    $support = 1 if $support > 1;
+    $guidance = 0 unless defined $guidance;
+    $guidance = 0 if $guidance < 0;
+    $guidance = 100 if $guidance > 100;
+    return exp(log(10) * ($guidance / 100) * $support);
 }
 
 sub _lastfmEndorsedWeightForPercent {

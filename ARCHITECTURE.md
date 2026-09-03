@@ -21,7 +21,18 @@ The two preference namespaces are deliberately separate:
 - `plugin.blissmixer` supplies filters, repeat limits, weights, seed strategy,
   genre groups, DSTM count, and Last.fm behavior.
 - `plugin.blissmixerext` supplies only the learned blend, play-count influence,
-  and training-data backup path.
+  Last.fm similar-track guidance, and training-data backup path.
+
+## Candidate reranking
+
+BlissMixerExt never expands candidate membership beyond tracks returned by its
+sidecar mixer. Upstream Last.fm artist endorsement, experimental Last.fm
+similar-track evidence, and play-count influence rerank one shared candidate
+pool. Last.fm recording matches prefer MusicBrainz recording IDs and fall back
+to normalized artist/title identity. Track and artist request lanes run
+concurrently and are bounded by a DSTM deadline; partial evidence is usable and
+provider failure falls back to the remaining signals or the original Bliss
+order.
 
 ## Database lifecycle
 

@@ -22,7 +22,8 @@
 [% WRAPPER settingSection %]
     <p>[% "BLISSMIXEREXT_SETTINGS_NOTE" | string %]</p>
 
-    <h3>[% "BLISSMIXEREXT_STATUS" | string %]</h3>
+    <b style="font-size:125%" id="status-section-header" class="shown-section" onclick="toggleSection('status-section')">[% "BLISSMIXEREXT_STATUS" | string %]</b><br/><br/>
+    <div id="status-section">
     [% IF upstream_compatible %]
         <p style="color:#398439">[% "BLISSMIXEREXT_UPSTREAM_OK" | string %] [% upstream_version %].</p>
     [% ELSE %]
@@ -38,8 +39,9 @@
     [% ELSE %]
         <p style="color:#c9302c">[% "BLISSMIXEREXT_STATISTICS_UNAVAILABLE" | string %]</p>
     [% END %]
-
     <br/><hr style="opacity:0.4" class="sub-sep"/><br/>
+    </div>
+
     <b style="font-size:125%" id="mix-section-header" class="shown-section" onclick="toggleSection('mix-section')">[% "BLISSMIXEREXT_MIX_SETTINGS" | string %]</b><br/><br/>
     <div id="mix-section">
     <div style="opacity:0.6">[% "BLISSMIXEREXT_MIX_SETTINGS_NOTE" | string %]</div><br/>
@@ -48,15 +50,23 @@
     [% END %]
 
     [% WRAPPER settingGroup title="BLISSMIXEREXT_PLAYCOUNT_INFLUENCE" desc="BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_DESC" %]
-        <input type="number" min="-100" max="100" step="5" class="stdedit sliderInput_-100_100_5" name="pref_playcount_influence" id="playcount_influence" value="[% prefs.playcount_influence %]" size="5" [% UNLESS statistics_enabled %]disabled[% END %]>
+        <input type="number" min="-100" max="100" step="1" class="stdedit sliderInput_-100_100_1" name="pref_playcount_influence" id="playcount_influence" value="[% prefs.playcount_influence %]" size="5" [% UNLESS statistics_enabled %]disabled[% END %]>
         [% UNLESS statistics_enabled %]
             <input type="hidden" name="pref_playcount_influence" value="[% prefs.playcount_influence %]">
             <div style="opacity:0.6;margin-top:4px">[% "BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_UNAVAILABLE" | string %]</div>
         [% END %]
     [% END %]
+
+    [% WRAPPER settingGroup title="BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE" desc="BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE_DESC" %]
+        <input type="number" min="0" max="100" step="1" class="stdedit sliderInput_0_100_1" name="pref_lastfm_track_guidance_percent" id="lastfm_track_guidance_percent" value="[% prefs.lastfm_track_guidance_percent %]" size="5" [% UNLESS lastmix_available && upstream_lastfm_enabled %]disabled[% END %]>
+        [% UNLESS lastmix_available && upstream_lastfm_enabled %]
+            <input type="hidden" name="pref_lastfm_track_guidance_percent" value="[% prefs.lastfm_track_guidance_percent %]">
+            <div style="opacity:0.6;margin-top:4px">[% "BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE_UNAVAILABLE" | string %]</div>
+        [% END %]
+    [% END %]
+    <br/><hr style="opacity:0.4" class="sub-sep"/><br/>
     </div>
 
-    <br/><hr style="opacity:0.4" class="sub-sep"/><br/>
     <b style="font-size:125%" id="learning-section-header" class="hidden-section" onclick="toggleSection('learning-section')">[% "BLISSMIXEREXT_LEARNING" | string %]</b><br/><br/>
     <div id="learning-section" class="hidden">
     [% IF no_learner_binary %]
@@ -311,6 +321,7 @@
     }
 
     window.addEventListener('load', () => {
+        restoreSectionState('status-section', true);
         restoreSectionState('mix-section', true);
         restoreSectionState('learning-section', false);
         if (document.getElementById('learning-button')) {

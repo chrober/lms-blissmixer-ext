@@ -50,6 +50,14 @@ signal. It uses LMS's built-in listening statistics, which are enabled by
 default. If LMS was started with `--nostatistics`, remove that command-line
 option and restart the server; there is no corresponding web setting.
 
+When Adaptive weighting and Last.fm artist weighting are enabled in upstream
+BlissMixer, the optional similar-track guidance asks LastMix for recordings
+related to the current DSTM seeds. Recording MBIDs are preferred, with
+normalized artist/title matching as a fallback. Only candidates already
+returned by Bliss can be selected, and unavailable, partial, slow, or malformed
+Last.fm responses degrade to the evidence available at the deadline or to
+Bliss alone.
+
 ## Compatibility and isolation
 
 The sidecar deliberately does not register an analyser, importer, Bliss Mixer
@@ -65,7 +73,9 @@ Every push and pull request runs repository validation, feed-update unit tests,
 and the Perl plugin regression suite. The Perl tests exercise the sidecar's
 upstream compatibility gate, DSTM identity and port isolation, inherited mixer
 preferences, survey persistence and backup/restore, and learned-matrix
-replacement behavior. Release publication runs the same test gate.
+replacement behavior. It also covers Last.fm recording matching, partial
+provider failures, and the combined selection signals. Release publication
+runs the same test gate.
 
 The separate `BlissMixer DSTM drift` workflow checks the current upstream
 implementation every Monday and whenever the DSTM implementation or drift

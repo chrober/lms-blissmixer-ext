@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 - 2026-09-03
+
+- Add bounded Last.fm similar-track guidance for local Bliss candidates, using
+  recording MBIDs with normalized artist/title fallback.
+- Collect track and artist evidence concurrently, accept partial results, and
+  fall back after a short deadline without blocking DSTM playback.
+- Combine track similarity with the existing artist endorsement and optional
+  play-count influence without further enlarging their shared candidate pool.
+- Preserve `bliss-only` and `last.fm-endorsed` diagnostics in combined
+  selection logs, add recording evidence and play counts, and align every
+  pipe-delimited column.
+- Make Companion status collapsible and keep each section's separator inside
+  the section so it disappears when the section is folded.
+- Change Play-count influence to one-point slider steps and remove candidate-
+  pool implementation details from its user-facing description.
+
 ## 0.2.0 - 2026-09-03
 
 - Add a bidirectional play-count influence setting: negative values favor

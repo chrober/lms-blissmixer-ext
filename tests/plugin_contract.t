@@ -31,6 +31,7 @@ BEGIN {
         'plugin.blissmixerext' => {
             learned_blend => 50,
             playcount_influence => 0,
+            lastfm_track_guidance_percent => 25,
         },
     );
     sub get { return $values{$_[0]->{name}}{$_[1]} }
@@ -56,6 +57,7 @@ BEGIN {
 
     package Slim::Utils::Log;
     sub addLogCategory { return bless {}, 'TestLog' }
+    sub logger { return bless {}, 'TestLog' }
     $INC{'Slim/Utils/Log.pm'} = __FILE__;
 
     package Slim::Utils::Misc;
@@ -129,18 +131,20 @@ BEGIN {
 
     package TestTrack;
     sub new {
-        my ($class, $url, $playcount, $artist, $title) = @_;
+        my ($class, $url, $playcount, $artist, $title, $mbid) = @_;
         return bless {
             url => $url,
             playcount => $playcount,
             artist => $artist || 'Artist',
             title => $title || $url,
+            mbid => $mbid,
         }, $class;
     }
     sub url { return $_[0]->{url} }
     sub playcount { return $_[0]->{playcount} }
     sub artistName { return $_[0]->{artist} }
     sub title { return $_[0]->{title} }
+    sub musicbrainz_id { return $_[0]->{mbid} }
 }
 
 use lib "$FindBin::Bin/..";
@@ -214,6 +218,13 @@ is(Plugins::BlissMixerExt::Plugin::_lastfmEndorsedWeightForPercent(50, 0, 8), 1,
     'an empty endorsed set keeps neutral weighting');
 is(Plugins::BlissMixerExt::Plugin::_lastfmNormalizeArtist('  The Artist  '), 'the artist',
     'Last.fm artist keys are normalized consistently');
+is(Plugins::BlissMixerExt::Plugin::_lastfmTrackWeight(1, 0), 1,
+    'zero Last.fm track guidance is neutral');
+cmp_ok(abs(Plugins::BlissMixerExt::Plugin::_lastfmTrackWeight(1, 100) - 10),
+    '<', 0.000001, 'maximum recording evidence has a bounded tenfold weight');
+$TestPrefs::values{'plugin.blissmixerext'}{lastfm_track_guidance_percent} = 125;
+is(Plugins::BlissMixerExt::Plugin::_lastfmTrackGuidance(), 100,
+    'Last.fm similar-track guidance is clamped at the positive limit');
 
 $TestPrefs::values{'plugin.blissmixerext'}{playcount_influence} = 55;
 is(Plugins::BlissMixerExt::Plugin::_playCountInfluence(), 55,
@@ -280,6 +291,70 @@ is_deeply(
     ['first'],
     'missing and zero play counts are equivalent and preserve Bliss order',
 );
+my @lastfm_track_candidates = (
+    TestTrack->new('unmatched', 0, 'Artist', 'Unmatched'),
+    TestTrack->new('track-match', 0, 'Artist', 'Matched'),
+);
+is_deeply(
+    Plugins::BlissMixerExt::Plugin::_selectWeightedCandidates(
+        \@lastfm_track_candidates,
+        1,
+        0,
+        undef,
+        undef,
+        sub { 0.5 },
+        {mbid => {}, name => {'artist|matched' => 1}},
+        100,
+    ),
+    ['track-match'],
+    'Last.fm recording evidence can promote a matching Bliss candidate',
+);
+my $selection_log_lines = Plugins::BlissMixerExt::Plugin::_selectionLogLines(
+    [
+        {
+            track => TestTrack->new('bliss-only', 13, 'Ten Years After', 'Here They Come'),
+            playcount => 13,
+            rank => 2,
+            weight => 0.580,
+            endorsed => 0,
+            track_support => 0,
+        },
+        {
+            track => TestTrack->new('artist-match', 8, 'The Stills-Young Band', 'Midnight on the Bay'),
+            playcount => 8,
+            rank => 6,
+            weight => 3.250,
+            endorsed => 1,
+            track_support => 0,
+        },
+        {
+            track => TestTrack->new('track-match', 3, 'Johnny Cash', 'You Are My Sunshine'),
+            playcount => 3,
+            rank => 18,
+            weight => 16.965,
+            endorsed => 1,
+            track_support => 0.765,
+        },
+    ],
+    20,
+    25,
+);
+like($selection_log_lines->[0], qr/bliss-only/,
+    'combined selection log retains the Bliss-only tier');
+like($selection_log_lines->[1], qr/last\.fm-endorsed/,
+    'combined selection log retains the artist-endorsement tier');
+like($selection_log_lines->[2], qr/last\.fm-track\+artist/,
+    'combined selection log distinguishes recording plus artist evidence');
+my @first_pipes;
+my @second_pipes;
+my @third_pipes;
+while ($selection_log_lines->[0] =~ /\|/g) { push @first_pipes, pos($selection_log_lines->[0]) }
+while ($selection_log_lines->[1] =~ /\|/g) { push @second_pipes, pos($selection_log_lines->[1]) }
+while ($selection_log_lines->[2] =~ /\|/g) { push @third_pipes, pos($selection_log_lines->[2]) }
+is_deeply(\@first_pipes, \@second_pipes,
+    'combined selection log pipe separators align between Bliss and artist tiers');
+is_deeply(\@first_pipes, \@third_pipes,
+    'combined selection log pipe separators align for track evidence too');
 
 is_deeply(
     Plugins::BlissMixerExt::Plugin::_genreGroups(),

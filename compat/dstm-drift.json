@@ -35,8 +35,8 @@
   "intentional_adaptations": {
     "postinitPlugin": "Registers Bliss (Ext) independently and applies the upstream compatibility gate.",
     "_pathToTrack": "Carries the sidecar's Windows path existence fix until it is present upstream.",
-    "_dstmMix": "Owns the sidecar process and adds learned-matrix selection, play-count reranking, blend handling, and experimental diagnostics.",
-    "_selectViaLastFm": "Combines Last.fm endorsement and play-count influence over one shared candidate pool, while retaining upstream behavior when play-count influence is disabled.",
+    "_dstmMix": "Owns the sidecar process and adds learned-matrix selection, play-count reranking, Last.fm similar-track guidance, blend handling, and experimental diagnostics.",
+    "_selectViaLastFm": "Combines Last.fm recording and artist evidence with play-count influence over one shared candidate pool, applies a bounded deadline, and retains upstream artist-only behavior when the experimental signals are disabled.",
     "_getMixData": "Adds the learnedblend request property.",
     "_buildComparisonJson": "Adds learnedblend overrides used by experimental comparison diagnostics."
   }

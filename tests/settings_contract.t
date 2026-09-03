@@ -19,6 +19,10 @@ BEGIN {
     package TestSettingsPrefs;
     our %values = (
         'plugin.blissmixerext' => {},
+        'plugin.blissmixer' => {
+            use_adaptive_weights => 1,
+            use_lastfm_weighting => 1,
+        },
         server => {httpport => 9000},
     );
     sub get { return $values{$_[0]->{name}}{$_[1]} }
@@ -46,6 +50,7 @@ BEGIN {
 
     package Slim::Utils::PluginManager;
     sub dataForPlugin { return {version => '0.10.0'} }
+    sub isEnabled { return 1 }
     $INC{'Slim/Utils/PluginManager.pm'} = __FILE__;
 
     package Slim::Utils::Strings;
@@ -74,7 +79,7 @@ is(
 my (undef, @preference_names) = Plugins::BlissMixerExt::Settings->prefs();
 is_deeply(
     \@preference_names,
-    [qw(learned_blend playcount_influence triplets_backup_path)],
+    [qw(learned_blend playcount_influence lastfm_track_guidance_percent triplets_backup_path)],
     'settings expose only user-meaningful experimental preferences',
 );
 
@@ -90,6 +95,9 @@ is($request_host{upstream_version}, '0.10.0',
     'the displayed upstream version comes from the live loaded manifest');
 ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
 ok($request_host{statistics_enabled}, 'enabled LMS listening statistics are reported');
+ok($request_host{lastmix_available}, 'enabled LastMix is reported');
+ok($request_host{upstream_lastfm_enabled},
+    'upstream Adaptive Last.fm weighting is reported');
 is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
     'dynamic JavaScript messages are localized before rendering');
 is($request_host{backup_now_text}, 'localized:BLISSMIXEREXT_BACKUP_NOW',
@@ -111,5 +119,15 @@ is(
     'http://127.0.0.1:9000/jsonrpc.js',
     'server address is used only when the request has no host',
 );
+
+my %submitted = (
+    pref_playcount_influence => -101,
+    pref_lastfm_track_guidance_percent => 101,
+);
+Plugins::BlissMixerExt::Settings->handler(undef, \%submitted);
+is($submitted{pref_playcount_influence}, -100,
+    'submitted play-count influence is clamped');
+is($submitted{pref_lastfm_track_guidance_percent}, 100,
+    'submitted Last.fm track guidance is clamped');
 
 done_testing();

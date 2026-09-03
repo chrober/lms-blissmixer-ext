@@ -46,6 +46,7 @@ BEGIN {
 
     package Slim::Utils::PluginManager;
     sub dataForPlugin { return {version => '0.10.0'} }
+    sub isEnabled { return 1 }
     $INC{'Slim/Utils/PluginManager.pm'} = __FILE__;
 
     package Slim::Utils::Strings;

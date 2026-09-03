@@ -24,6 +24,7 @@ if manifest.findtext("id") == "6979c1ee-0644-4ed1-a440-c5ff6869eae4":
 
 plugin_source = (PLUGIN / "Plugin.pm").read_text(encoding="utf-8")
 survey_source = (PLUGIN / "Survey.pm").read_text(encoding="utf-8")
+lastfm_track_source = (PLUGIN / "LastFmTrackSimilarity.pm").read_text(encoding="utf-8")
 
 required = {
     "separate preference namespace": "preferences('plugin.blissmixerext')",
@@ -39,10 +40,16 @@ required = {
     "sidecar learner notifications": '"--lms-command", "blissmixerext"',
     "runtime statistics gate": "return 0 unless _statisticsEnabled()",
     "shared Last.fm/play-count pool": "_candidatePoolMultiplier",
+    "Last.fm similar-track lookup": "getSimilarTracks",
+    "bounded Last.fm evidence deadline": "LASTFM_EVIDENCE_TIMEOUT",
 }
 for description, needle in required.items():
-    if needle not in plugin_source + survey_source:
+    if needle not in plugin_source + survey_source + lastfm_track_source:
         fail(f"missing {description}: {needle}")
+
+for selection_tier in ("bliss-only", "last.fm-endorsed", "last.fm-track"):
+    if selection_tier not in plugin_source:
+        fail(f"selection logging must retain the {selection_tier} evidence tier")
 
 for forbidden in (
     "Plugins::BlissMixerExt::Analyser",
@@ -58,19 +65,33 @@ if 'blissmixer-triplets-${ts}.zip' not in survey_source:
 
 settings = (PLUGIN / "HTML/EN/plugins/BlissMixerExt/settings/blissmixerext.html").read_text(encoding="utf-8")
 for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):
-    if upstream_pref not in {"learned_blend", "playcount_influence", "triplets_backup_path"}:
+    if upstream_pref not in {
+        "learned_blend", "playcount_influence",
+        "lastfm_track_guidance_percent", "triplets_backup_path",
+    }:
         fail(f"settings page duplicates upstream preference: {upstream_pref}")
 if 'name="pref_mixer_port"' in settings:
     fail("settings page must not expose the sidecar's internal mixer port")
 if "sliderInput_0_100_1" not in settings:
     fail("learned matrix influence must use the LMS slider control")
-if "sliderInput_-100_100_5" not in settings:
+if "sliderInput_-100_100_1" not in settings:
     fail("play-count influence must use the bidirectional LMS slider control")
 if not re.search(r'id="playcount_influence"[^>]+\[% UNLESS statistics_enabled %\]disabled', settings):
     fail("play-count influence slider must be disabled without LMS statistics")
-for section in ("mix-section", "learning-section"):
+if "sliderInput_-100_100_5" in settings or 'step="5"' in settings:
+    fail("play-count influence must use one-point steps")
+if 'id="lastfm_track_guidance_percent"' not in settings:
+    fail("settings page must expose Last.fm similar-track guidance")
+for section in ("status-section", "mix-section", "learning-section"):
     if f'id="{section}-header"' not in settings or f'id="{section}"' not in settings:
         fail(f"settings page is missing the {section} grouping")
+for section in ("status-section", "mix-section"):
+    if not re.search(
+        rf'<div id="{section}"[^>]*>.*?<hr[^>]+class="sub-sep"[^>]*/?>.*?</div>',
+        settings,
+        re.DOTALL,
+    ):
+        fail(f"the {section} separator must fold with its section")
 if not re.search(
     r'<input type="text" class="stdedit selectFolder" '
     r'name="pref_triplets_backup_path" id="triplets_backup_path" '
@@ -98,6 +119,8 @@ if "$paramRef->{host}" not in settings_source:
     fail("settings JSON-RPC URL must prefer the browser-facing LMS request host")
 if "$paramRef->{statistics_enabled} = main::STATISTICS ? 1 : 0" not in settings_source:
     fail("settings must expose live LMS statistics availability")
+if "$paramRef->{upstream_lastfm_enabled}" not in settings_source:
+    fail("settings must expose the upstream Last.fm configuration")
 
 strings_path = PLUGIN / "strings.txt"
 strings_source = strings_path.read_text(encoding="utf-8")
@@ -123,6 +146,12 @@ if (
     fail("plugin description must identify experimental and early-access extensions")
 if "BLISSMIXEREXT_DSTM\n\tEN\tBliss (Ext)" not in strings_source:
     fail("the Bliss (Ext) DSTM provider display name must remain stable")
+for implementation_detail in (
+    "larger candidate pool",
+    "share the same pool",
+):
+    if implementation_detail in strings_source:
+        fail(f"play-count help must omit implementation detail: {implementation_detail}")
 
 referenced_tokens = {
     manifest.findtext("name"),

@@ -47,10 +47,19 @@ BLISSMIXEREXT_PLAYCOUNT_INFLUENCE
 	EN	Play-count influence
 
 BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_DESC
-	EN	Controls how listening history reranks Bliss candidates. Negative values prefer less-played tracks, 0 disables reranking, and positive values prefer frequently played tracks. Greater absolute values consider a larger candidate pool; Last.fm and play count share the same pool when both are active.
+	EN	Controls how listening history affects track selection. Negative values prefer less-played tracks, 0 ignores play counts, and positive values prefer frequently played tracks.
 
 BLISSMIXEREXT_PLAYCOUNT_INFLUENCE_UNAVAILABLE
 	EN	This setting requires Lyrion listening statistics. They are disabled when the server is started with --nostatistics.
+
+BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE
+	EN	Last.fm similar-track guidance
+
+BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE_DESC
+	EN	Controls the bounded influence of Last.fm track similarity among local Bliss candidates. Zero disables similar-track lookups. Default: 25.
+
+BLISSMIXEREXT_LASTFM_TRACK_GUIDANCE_UNAVAILABLE
+	EN	Requires LastMix and the Adaptive weightings and Last.fm artist weighting options to be enabled in the original Bliss Mixer settings.
 
 BLISSMIXEREXT_LEARNING
 	EN	Metric learning
