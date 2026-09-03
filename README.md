@@ -58,6 +58,11 @@ returned by Bliss can be selected, and unavailable, partial, slow, or malformed
 Last.fm responses degrade to the evidence available at the deadline or to
 Bliss alone.
 
+INFO-level selection logs label Last.fm evidence in the centered first column:
+`(a)` means artist similarity, `(t)` means recording similarity, and `(a+t)`
+means both. Numeric support scores and calculated weights are available only at
+DEBUG level.
+
 ## Compatibility and isolation
 
 The sidecar deliberately does not register an analyser, importer, Bliss Mixer

@@ -34,6 +34,12 @@ concurrently and are bounded by a DSTM deadline; partial evidence is usable and
 provider failure falls back to the remaining signals or the original Bliss
 order.
 
+The analyser and mixer may access SQLite concurrently. While upstream analysis
+is running, the sidecar keeps an existing mixer available and suppresses
+timestamp-driven restarts. It performs one refresh after analysis finishes so
+the mixer sees the completed database without restarting for every analysed
+track.
+
 ## Database lifecycle
 
 BlissMixerExt resolves `bliss.db` in the LMS preferences directory after plugin

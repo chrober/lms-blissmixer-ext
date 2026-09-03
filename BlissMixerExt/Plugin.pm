@@ -54,6 +54,7 @@ my $prefs = preferences('plugin.blissmixer');
 my $extprefs = preferences('plugin.blissmixerext');
 my $dbPath = "";
 my $dbSignature = "";
+my $databaseRefreshDeferred = 0;
 my $initialized = 0;
 # Current bliss-mixer process
 my $mixer;
@@ -201,6 +202,7 @@ sub _stopMixer {
     }
     $lastMixerStart = 0;
     $mixerPort = 0;
+    $databaseRefreshDeferred = 0;
 }
 
 sub _portAvailable {
@@ -597,16 +599,27 @@ sub _pathToTrack {
 sub _dstmMix {
     my ($client, $cb, $filterGenres, $callCount) = @_;
 
-    if (_originalAnalyserRunning()) {
-        _stopMixer();
-        $log->warn('Upstream BlissMixer analysis is running; Bliss (Ext) is temporarily unavailable');
-        _mixerNotAvailable($client, $cb);
-        return;
-    }
-
+    my $analysisRunning = _originalAnalyserRunning();
     my $currentDbSignature = _databaseSignature();
-    if ($mixer && $mixer->alive && $dbSignature ne $currentDbSignature) {
-        main::INFOLOG && $log->info('Upstream bliss.db changed; restarting bliss-mixer-ext');
+    my $refreshAction = _databaseRefreshAction(
+        $analysisRunning,
+        $mixer && $mixer->alive,
+        $dbSignature,
+        $currentDbSignature,
+        $databaseRefreshDeferred,
+    );
+    if ($refreshAction eq 'defer') {
+        unless ($databaseRefreshDeferred) {
+            main::INFOLOG && $log->info(
+                'Upstream BlissMixer analysis is updating bliss.db; '
+                . 'continuing mixes and deferring the database refresh'
+            );
+        }
+        $databaseRefreshDeferred = 1;
+    } elsif ($refreshAction eq 'restart') {
+        main::INFOLOG && $log->info($databaseRefreshDeferred
+            ? 'Upstream BlissMixer analysis finished; refreshing bliss-mixer-ext once'
+            : 'Upstream bliss.db changed; restarting bliss-mixer-ext');
         _stopMixer();
     }
 
@@ -998,12 +1011,16 @@ sub _selectViaLastFm {
             my $end = ($finalCount - 1 < $#{$trackObjs}) ? $finalCount - 1 : $#{$trackObjs};
             if (main::INFOLOG) {
                 $log->info("Last.fm unavailable: falling back to pure bliss top-$finalCount tracks");
-                $log->info(sprintf("Last.fm artist selection: 0 last.fm-endorsed, %d bliss-only in pool of %d (target=%d%%) -> selected %d",
-                    $poolSize, $poolSize, $targetPercent, $end + 1));
-                for my $i (0 .. $end) {
-                    $log->info("  [bliss-only, similarity-rank " . ($i + 1) . "/$poolSize] "
-                        . $trackObjs->[$i]->artistName . " - " . $trackObjs->[$i]->title);
-                }
+                $log->info(sprintf(
+                    'Last.fm selection: artists=0/%d (target=%d%%) -> selected %d',
+                    $poolSize, $targetPercent, $end + 1,
+                ));
+                my @fallbackEntries = map {
+                    {track => $trackObjs->[$_], rank => $_ + 1, endorsed => 0}
+                } 0 .. $end;
+                $log->info($_) for @{_selectionLogLines(
+                    \@fallbackEntries, $poolSize, 0
+                )};
             }
             my $urls = [ map { $_->url } @{$trackObjs}[0..$end] ];
             $cb->($urls);
@@ -1062,6 +1079,18 @@ sub _selectViaLastFm {
     }
 }
 
+sub _databaseRefreshAction {
+    my ($analysisRunning, $mixerAlive, $knownSignature, $currentSignature,
+        $refreshDeferred) = @_;
+    return 'none' unless $mixerAlive;
+    return 'defer'
+        if $analysisRunning && $knownSignature ne $currentSignature;
+    return 'restart'
+        if !$analysisRunning
+        && ($refreshDeferred || $knownSignature ne $currentSignature);
+    return 'none';
+}
+
 sub _selectArtistWeightedCandidates {
     my ($trackObjs, $finalCount, $lastfmArtists, $targetPercent, $random) = @_;
     $random ||= sub { rand() };
@@ -1092,29 +1121,16 @@ sub _selectArtistWeightedCandidates {
     splice(@weighted, $finalCount) if $poolSize > $finalCount;
 
     main::INFOLOG && $log->info(sprintf(
-        "Last.fm artist selection: %d last.fm-endorsed, %d bliss-only in pool of %d (target=%d%%, computed weight=%.3f) -> selected %d",
-        $endorsed_count, $rest_count, scalar @$trackObjs, $targetPercent,
-        $endorsedWeight, scalar @weighted,
+        'Last.fm selection: artists=%d/%d (target=%d%%) -> selected %d',
+        $endorsed_count, $poolSize, $targetPercent, scalar @weighted,
+    ));
+    main::DEBUGLOG && $log->debug(sprintf(
+        'Last.fm artist endorsement weight=%.3f (%d endorsed, %d bliss-only)',
+        $endorsedWeight, $endorsed_count, $rest_count,
     ));
 
     if (main::INFOLOG) {
-        my $rankWidth = length("$poolSize");
-        my $maxTierLen = 0;
-        for my $entry (@weighted) {
-            my $len = $entry->{endorsed}
-                ? length('last.fm-endorsed') : length('bliss-only');
-            $maxTierLen = $len if $len > $maxTierLen;
-        }
-        my $tierWidth = $maxTierLen + 2;
-        foreach my $entry (@weighted) {
-            my $tier = $entry->{endorsed} ? 'last.fm-endorsed' : 'bliss-only';
-            my $pad  = $tierWidth - length($tier);
-            my $lpad = ' ' x int($pad / 2);
-            my $rpad = ' ' x ($pad - int($pad / 2));
-            $log->info(sprintf("  [%s%s%s| similarity-rank %*d/%d ] %s - %s",
-                $lpad, $tier, $rpad, $rankWidth, $entry->{rank}, $poolSize,
-                $entry->{track}->artistName, $entry->{track}->title));
-        }
+        $log->info($_) for @{_selectionLogLines(\@weighted, $poolSize, 0)};
     }
 
     return [map { $_->{track}->url } @weighted];
@@ -1288,59 +1304,71 @@ sub _selectWeightedCandidates {
                 ? ", Last.fm artists=$endorsedCount/$poolSize (target=$lastfmTarget%)"
                 : '',
             $trackGuidance
-                ? ", Last.fm track guidance=$trackGuidance%, matches=$trackMatchCount"
+                ? ", Last.fm tracks=$trackMatchCount/$poolSize (influence=$trackGuidance%)"
                 : '',
         ));
         $log->info($_) for @{_selectionLogLines(
-            \@selected, $poolSize, $trackGuidance
+            \@selected, $poolSize, $effectivePlayCountInfluence != 0
         )};
+    }
+    if (main::DEBUGLOG) {
+        for my $entry (@selected) {
+            $log->debug(sprintf(
+                'Selection diagnostics: artist-endorsed=%d, playcount=%d, play-weight=%.3f, track-support=%.3f, track-weight=%.3f, total-weight=%.3f, similarity-rank=%d/%d, track=%s - %s',
+                $entry->{endorsed} ? 1 : 0,
+                $entry->{playcount} || 0,
+                $entry->{play_weight} || 1,
+                $entry->{track_support} || 0,
+                $entry->{track_weight} || 1,
+                $entry->{weight},
+                $entry->{rank}, $poolSize,
+                $entry->{track}->artistName, $entry->{track}->title,
+            ));
+        }
     }
 
     return [map { $_->{track}->url } @selected];
 }
 
 sub _selectionLogLines {
-    my ($selected, $poolSize, $trackGuidance) = @_;
-    my @rows;
-    my @widths;
+    my ($selected, $poolSize, $showPlayCount) = @_;
     my $rankWidth = length("$poolSize");
+    my $tierWidth = 0;
+    my $playCountWidth = 1;
 
     for my $entry (@{$selected || []}) {
-        my $hasTrackMatch = ($entry->{track_support} || 0) > 0;
-        my $tier = $hasTrackMatch
-            ? ($entry->{endorsed} ? 'last.fm-track+artist' : 'last.fm-track')
-            : ($entry->{endorsed} ? 'last.fm-endorsed' : 'bliss-only');
-        my @columns = (
-            $tier,
-            sprintf('playcount=%d', $entry->{playcount} || 0),
-        );
-        push @columns, sprintf(
-            'track-support=%.3f', $entry->{track_support} || 0
-        ) if $trackGuidance;
-        push @columns,
-            sprintf('similarity-rank %*d/%d', $rankWidth, $entry->{rank}, $poolSize),
-            sprintf('weight=%.3f', $entry->{weight});
-        for my $index (0 .. $#columns) {
-            my $length = length($columns[$index]);
-            $widths[$index] = $length
-                if !defined $widths[$index] || $length > $widths[$index];
-        }
-        push @rows, {entry => $entry, columns => \@columns};
+        my $length = length(_selectionEvidenceTier($entry));
+        $tierWidth = $length if $length > $tierWidth;
+        my $playLength = length('' . ($entry->{playcount} || 0));
+        $playCountWidth = $playLength if $playLength > $playCountWidth;
     }
+    $tierWidth += 2;
 
     my @lines;
-    for my $row (@rows) {
-        my @padded;
-        for my $index (0 .. $#{$row->{columns}}) {
-            push @padded, sprintf(
-                '%-*s', $widths[$index], $row->{columns}->[$index]
-            );
-        }
-        my $entry = $row->{entry};
-        push @lines, '  [' . join(' | ', @padded) . '] '
-            . $entry->{track}->artistName . ' - ' . $entry->{track}->title;
+    for my $entry (@{$selected || []}) {
+        my $tier = _selectionEvidenceTier($entry);
+        my $padding = $tierWidth - length($tier);
+        my $leftPadding = ' ' x int($padding / 2);
+        my $rightPadding = ' ' x ($padding - int($padding / 2));
+        my $playCount = $showPlayCount
+            ? sprintf('playcount=%*d | ', $playCountWidth, $entry->{playcount} || 0)
+            : '';
+        push @lines, sprintf(
+            '  [%s%s%s| %ssimilarity-rank %*d/%d ] %s - %s',
+            $leftPadding, $tier, $rightPadding, $playCount,
+            $rankWidth, $entry->{rank}, $poolSize,
+            $entry->{track}->artistName, $entry->{track}->title,
+        );
     }
     return \@lines;
+}
+
+sub _selectionEvidenceTier {
+    my $entry = shift;
+    my $hasTrackMatch = ($entry->{track_support} || 0) > 0;
+    return $entry->{endorsed}
+        ? ($hasTrackMatch ? 'last.fm-endorsed (a+t)' : 'last.fm-endorsed (a)')
+        : ($hasTrackMatch ? 'last.fm-endorsed (t)' : 'bliss-only');
 }
 
 sub _lastfmTrackWeight {

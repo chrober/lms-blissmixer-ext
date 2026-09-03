@@ -309,6 +309,18 @@ is_deeply(
     ['track-match'],
     'Last.fm recording evidence can promote a matching Bliss candidate',
 );
+
+is(Plugins::BlissMixerExt::Plugin::_databaseRefreshAction(1, 1, 'old', 'new', 0),
+    'defer', 'database refresh is deferred while upstream analysis is running');
+is(Plugins::BlissMixerExt::Plugin::_databaseRefreshAction(1, 1, 'same', 'same', 0),
+    'none', 'analysis alone does not interrupt an existing mixer');
+is(Plugins::BlissMixerExt::Plugin::_databaseRefreshAction(0, 1, 'old', 'new', 0),
+    'restart', 'a database change outside analysis refreshes the mixer');
+is(Plugins::BlissMixerExt::Plugin::_databaseRefreshAction(0, 1, 'same', 'same', 1),
+    'restart', 'a deferred refresh runs once after analysis finishes');
+is(Plugins::BlissMixerExt::Plugin::_databaseRefreshAction(1, 0, 'old', 'new', 0),
+    'none', 'analysis does not prevent an unavailable mixer from starting');
+
 my $selection_log_lines = Plugins::BlissMixerExt::Plugin::_selectionLogLines(
     [
         {
@@ -335,26 +347,65 @@ my $selection_log_lines = Plugins::BlissMixerExt::Plugin::_selectionLogLines(
             endorsed => 1,
             track_support => 0.765,
         },
+        {
+            track => TestTrack->new('track-only', 0, 'Track Artist', 'Track Title'),
+            playcount => 0,
+            rank => 20,
+            weight => 2.000,
+            endorsed => 0,
+            track_support => 0.500,
+        },
     ],
     20,
-    25,
+    1,
 );
 like($selection_log_lines->[0], qr/bliss-only/,
     'combined selection log retains the Bliss-only tier');
-like($selection_log_lines->[1], qr/last\.fm-endorsed/,
-    'combined selection log retains the artist-endorsement tier');
-like($selection_log_lines->[2], qr/last\.fm-track\+artist/,
+like($selection_log_lines->[1], qr/last\.fm-endorsed \(a\)/,
+    'combined selection log marks artist endorsement');
+like($selection_log_lines->[2], qr/last\.fm-endorsed \(a\+t\)/,
     'combined selection log distinguishes recording plus artist evidence');
+like($selection_log_lines->[3], qr/last\.fm-endorsed \(t\)/,
+    'combined selection log marks recording-only endorsement');
+like($selection_log_lines->[0], qr/^  \[ .* \| playcount=/,
+    'selection log keeps padding immediately inside the brackets');
+like($selection_log_lines->[0], qr/ similarity-rank\s+2\/20 \] /,
+    'selection log keeps the historical space before the closing bracket');
+unlike(join("\n", @$selection_log_lines), qr/(?:track-support|weight=)/,
+    'informational selection rows omit numeric implementation diagnostics');
+my ($leftTierPadding, $rightTierPadding) =
+    $selection_log_lines->[0] =~ /^  \[(\s*)bliss-only(\s*)\|/;
+ok(length($leftTierPadding) > 1 && length($rightTierPadding) > 1,
+    'the shorter Bliss-only label has visible padding on both sides');
+cmp_ok(abs(length($leftTierPadding) - length($rightTierPadding)), '<=', 1,
+    'the evidence label is centered using the historical algorithm');
 my @first_pipes;
 my @second_pipes;
 my @third_pipes;
+my @fourth_pipes;
 while ($selection_log_lines->[0] =~ /\|/g) { push @first_pipes, pos($selection_log_lines->[0]) }
 while ($selection_log_lines->[1] =~ /\|/g) { push @second_pipes, pos($selection_log_lines->[1]) }
 while ($selection_log_lines->[2] =~ /\|/g) { push @third_pipes, pos($selection_log_lines->[2]) }
+while ($selection_log_lines->[3] =~ /\|/g) { push @fourth_pipes, pos($selection_log_lines->[3]) }
 is_deeply(\@first_pipes, \@second_pipes,
     'combined selection log pipe separators align between Bliss and artist tiers');
 is_deeply(\@first_pipes, \@third_pipes,
+    'combined selection log pipe separators align for combined evidence');
+is_deeply(\@first_pipes, \@fourth_pipes,
     'combined selection log pipe separators align for track evidence too');
+
+my $artist_only_log = Plugins::BlissMixerExt::Plugin::_selectionLogLines(
+    [{
+        track => TestTrack->new('artist-only', 0, 'Artist', 'Title'),
+        rank => 7,
+        endorsed => 1,
+    }],
+    20,
+    0,
+);
+like($artist_only_log->[0],
+    qr/^  \[ last\.fm-endorsed \(a\) \| similarity-rank\s+7\/20 \] /,
+    'artist-only output retains the historical centered two-column layout');
 
 is_deeply(
     Plugins::BlissMixerExt::Plugin::_genreGroups(),

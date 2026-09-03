@@ -47,9 +47,17 @@ for description, needle in required.items():
     if needle not in plugin_source + survey_source + lastfm_track_source:
         fail(f"missing {description}: {needle}")
 
-for selection_tier in ("bliss-only", "last.fm-endorsed", "last.fm-track"):
+for selection_tier in (
+    "bliss-only", "last.fm-endorsed (a)", "last.fm-endorsed (t)",
+):
     if selection_tier not in plugin_source:
         fail(f"selection logging must retain the {selection_tier} evidence tier")
+if "last.fm-endorsed (a+t)" not in plugin_source:
+    fail("selection logging must distinguish combined artist and track evidence")
+if "continuing mixes and deferring the database refresh" not in plugin_source:
+    fail("DSTM must remain available while upstream analysis updates bliss.db")
+if "temporarily unavailable" in plugin_source:
+    fail("upstream analysis must not disable Bliss (Ext)")
 
 for forbidden in (
     "Plugins::BlissMixerExt::Analyser",

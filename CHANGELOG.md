@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 - 2026-09-03
+
+- Restore the historical centered Last.fm selection columns and distinguish
+  artist `(a)`, track `(t)`, and combined `(a+t)` endorsements directly in the
+  first column.
+- Keep numeric support and weight calculations at debug level, while making
+  the INFO summary report both artist and track matches as shares of the pool.
+- Continue serving mixes while upstream analysis updates `bliss.db`, deferring
+  one mixer refresh until analysis has finished.
+
 ## 0.3.0 - 2026-09-03
 
 - Add bounded Last.fm similar-track guidance for local Bliss candidates, using
