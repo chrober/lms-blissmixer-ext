@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 use FindBin;
+use File::Spec;
+use File::Temp qw(tempdir);
 use Test::More;
 use JSON::PP ();
 
@@ -204,5 +206,37 @@ is_deeply(
 
 is(Plugins::BlissMixerExt::Plugin->title(), 'BlissMixerExt',
     'plugin identity remains distinct from upstream');
+
+my $migration_dir = tempdir(CLEANUP => 1);
+my $legacy_matrix = File::Spec->catfile($migration_dir, 'blissmixer-ext-matrix.json');
+my $canonical_matrix = File::Spec->catfile($migration_dir, 'learned_matrix.json');
+open my $legacy_fh, '>', $legacy_matrix or die "Cannot create $legacy_matrix: $!";
+print {$legacy_fh} "legacy matrix\n";
+close $legacy_fh;
+is(
+    Plugins::BlissMixerExt::Plugin::_migrateLearningFile(
+        $legacy_matrix, $canonical_matrix,
+    ),
+    'migrated',
+    'an Ext-specific learning file is migrated to its canonical filename',
+);
+ok(-e $canonical_matrix, 'the migrated canonical learning file exists');
+ok(!-e $legacy_matrix, 'the successfully migrated legacy file is gone');
+
+open my $canonical_fh, '>', $canonical_matrix
+    or die "Cannot replace $canonical_matrix: $!";
+print {$canonical_fh} "canonical matrix\n";
+close $canonical_fh;
+open $legacy_fh, '>', $legacy_matrix or die "Cannot recreate $legacy_matrix: $!";
+print {$legacy_fh} "other matrix\n";
+close $legacy_fh;
+is(
+    Plugins::BlissMixerExt::Plugin::_migrateLearningFile(
+        $legacy_matrix, $canonical_matrix,
+    ),
+    'conflict',
+    'an existing canonical learning file is never overwritten',
+);
+ok(-e $legacy_matrix, 'a conflicting legacy file is left untouched');
 
 done_testing();

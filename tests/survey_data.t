@@ -64,13 +64,13 @@ require Plugins::BlissMixerExt::Survey;
 
 my $temporary = tempdir(CLEANUP => 1);
 my $database = File::Spec->catfile($temporary, 'bliss.db');
-my $matrix = File::Spec->catfile($temporary, 'blissmixer-ext-matrix.json');
-my $triplets = File::Spec->catfile($temporary, 'blissmixer-ext-triplets.json');
+my $matrix = File::Spec->catfile($temporary, 'learned_matrix.json');
+my $triplets = File::Spec->catfile($temporary, 'training_triplets.json');
 $TestSurveyPrefs::values{triplets_backup_path} = $temporary;
 
 Plugins::BlissMixerExt::Survey::init($database, $matrix, $triplets);
 is(Plugins::BlissMixerExt::Survey::matrixPath(), $matrix,
-    'survey exposes only the sidecar matrix path');
+    'survey exposes the canonical learned matrix path');
 is(scalar @Slim::Web::Pages::handlers, 2,
     'survey page and API handlers are registered');
 
@@ -87,7 +87,7 @@ is_deeply(Plugins::BlissMixerExt::Survey::_loadTriplets(), $training,
 my ($backup_ok, $backup_error) = Plugins::BlissMixerExt::Survey::_backupTriplets();
 ok($backup_ok, 'training data can be backed up');
 ok(!defined $backup_error, 'successful backup has no error');
-my @backups = glob(File::Spec->catfile($temporary, 'blissmixerext-triplets-*.zip'));
+my @backups = glob(File::Spec->catfile($temporary, 'blissmixer-triplets-*.zip'));
 is(scalar @backups, 1, 'one timestamped backup archive is created');
 
 unlink $triplets or die "Cannot remove $triplets: $!";

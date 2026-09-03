@@ -32,6 +32,9 @@ required = {
     "separate learner binary": "findbin('bliss-learner-ext')",
     "loopback-only mixer": 'push @params, "127.0.0.1"',
     "automatic loopback port selection": "_availableMixerPort",
+    "canonical learned matrix": "'learned_matrix.json'",
+    "canonical training triplets": "'training_triplets.json'",
+    "legacy data migration": "_migrateLearningFile",
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source:
@@ -45,6 +48,9 @@ for forbidden in (
 ):
     if forbidden in plugin_source:
         fail(f"sidecar contains conflicting registration: {forbidden}")
+
+if 'blissmixer-triplets-${ts}.zip' not in survey_source:
+    fail("training-data backups must retain the established BlissMixer filename")
 
 settings = (PLUGIN / "HTML/EN/plugins/BlissMixerExt/settings/blissmixerext.html").read_text(encoding="utf-8")
 for upstream_pref in re.findall(r'name="pref_([^"]+)"', settings):

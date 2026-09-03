@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 - 2026-09-03
+
+- Restore the established `learned_matrix.json`, `training_triplets.json`, and
+  `blissmixer-triplets-<timestamp>.zip` learning-data filenames.
+- Migrate data created by BlissMixerExt 0.1.0-0.1.3 to the canonical filenames
+  without overwriting an existing canonical file.
+
 ## 0.1.3 - 2026-09-03
 
 - Match BlissMixer's persistent training-data backup folder control.

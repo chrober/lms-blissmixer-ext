@@ -441,7 +441,7 @@ sub _backupTriplets {
     }
     my @t = localtime(time());
     my $ts = sprintf("%04d%02d%02d-%02d%02d%02d", $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]);
-    my $zipFile = File::Spec->catfile($backupDir, "blissmixerext-triplets-${ts}.zip");
+    my $zipFile = File::Spec->catfile($backupDir, "blissmixer-triplets-${ts}.zip");
     my $zip = Archive::Zip->new();
     $zip->addFile($tripletsPath, "training_triplets.json");
     if ($zip->writeToFileNamed($zipFile) != AZ_OK) {

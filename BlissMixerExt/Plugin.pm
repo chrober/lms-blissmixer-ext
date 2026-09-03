@@ -16,7 +16,7 @@ use IO::Socket::INET;
 use LWP::UserAgent;
 use JSON::XS::VersionOneAndTwo;
 use File::Basename;
-use File::Spec::Functions qw(catdir);
+use File::Spec::Functions qw(catdir catfile);
 use Proc::Background;
 use Time::HiRes ();
 
@@ -153,9 +153,34 @@ sub _initBinaries {
     $mixerBinary = Slim::Utils::Misc::findbin('bliss-mixer-ext');
     main::INFOLOG && $log->info("Mixer: ${mixerBinary}");
 
-    my $matrixPath = Slim::Utils::Prefs::dir() . "/blissmixer-ext-matrix.json";
-    my $tripletsPath = Slim::Utils::Prefs::dir() . "/blissmixer-ext-triplets.json";
+    my $prefsDir = Slim::Utils::Prefs::dir();
+    my $matrixPath = catfile($prefsDir, 'learned_matrix.json');
+    my $tripletsPath = catfile($prefsDir, 'training_triplets.json');
+    _migrateLearningFile(
+        catfile($prefsDir, 'blissmixer-ext-matrix.json'), $matrixPath,
+    );
+    _migrateLearningFile(
+        catfile($prefsDir, 'blissmixer-ext-triplets.json'), $tripletsPath,
+    );
     Plugins::BlissMixerExt::Survey::init($dbPath, $matrixPath, $tripletsPath);
+}
+
+sub _migrateLearningFile {
+    my ($legacyPath, $canonicalPath) = @_;
+    if (-e $canonicalPath) {
+        if (-e $legacyPath) {
+            $log->warn("Both canonical and legacy BlissMixerExt learning files exist; using $canonicalPath and leaving $legacyPath untouched");
+            return 'conflict';
+        }
+        return 'canonical';
+    }
+    return 'absent' unless -e $legacyPath;
+    if (rename $legacyPath, $canonicalPath) {
+        main::INFOLOG && $log->info("Migrated BlissMixerExt learning file from $legacyPath to $canonicalPath");
+        return 'migrated';
+    }
+    $log->warn("Could not migrate BlissMixerExt learning file from $legacyPath to $canonicalPath: $!");
+    return 'failed';
 }
 
 sub _resetMixerTimeout {
