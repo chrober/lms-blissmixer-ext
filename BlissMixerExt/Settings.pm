@@ -50,6 +50,10 @@ sub beforeRender {
     $paramRef->{database_exists} = -e File::Spec->catfile($dbDir, 'bliss.db') ? 1 : 0;
     $paramRef->{matrix_exists} = -e File::Spec->catfile($dbDir, 'learned_matrix.json') ? 1 : 0;
     $paramRef->{no_learner_binary} = !Slim::Utils::Misc::findbin('bliss-learner-ext');
+    $paramRef->{learning_start_text} = string('BLISSMIXEREXT_LEARNING_START_TIME');
+    $paramRef->{learning_duration_text} = string('BLISSMIXEREXT_LEARNING_DURATION');
+    $paramRef->{learning_status_text} = string('BLISSMIXEREXT_LEARNING_STATUS');
+    $paramRef->{learning_failed_text} = string('BLISSMIXEREXT_LEARNING_FAILED');
     $paramRef->{restore_in_progress_text} = string('BLISSMIXEREXT_RESTORE_IN_PROGRESS');
     $paramRef->{restore_success_text} = string('BLISSMIXEREXT_RESTORE_SUCCESS');
     $paramRef->{restore_failed_text} = string('BLISSMIXEREXT_RESTORE_FAILED');

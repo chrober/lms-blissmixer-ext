@@ -83,11 +83,22 @@ is(
     'JSON-RPC uses the browser-facing LMS request host',
 );
 ok($request_host{upstream_compatible}, 'compatible upstream is reported');
+is($request_host{upstream_version}, '0.10.0',
+    'the displayed upstream version comes from the live loaded manifest');
 ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
 is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
     'dynamic JavaScript messages are localized before rendering');
 is($request_host{backup_now_text}, 'localized:BLISSMIXEREXT_BACKUP_NOW',
     'backup button text is localized before rendering like upstream');
+is($request_host{learning_start_text},
+    'localized:BLISSMIXEREXT_LEARNING_START_TIME',
+    'live learner start time label is localized before rendering');
+is($request_host{learning_duration_text},
+    'localized:BLISSMIXEREXT_LEARNING_DURATION',
+    'live learner duration label is localized before rendering');
+is($request_host{learning_status_text},
+    'localized:BLISSMIXEREXT_LEARNING_STATUS',
+    'live learner progress label is localized before rendering');
 
 my %fallback_host;
 Plugins::BlissMixerExt::Settings->beforeRender(\%fallback_host);

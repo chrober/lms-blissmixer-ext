@@ -11,7 +11,7 @@ BLISSMIXEREXT_STATUS
 	EN	Companion status
 
 BLISSMIXEREXT_UPSTREAM_OK
-	EN	Compatible upstream BlissMixer version:
+	EN	Compatible installed BlissMixer version:
 
 BLISSMIXEREXT_UPSTREAM_MISSING
 	EN	BlissMixerExt requires an enabled upstream BlissMixer 0.10.0 or newer. Detected version:
@@ -63,6 +63,18 @@ BLISSMIXEREXT_STOP_LEARNING
 
 BLISSMIXEREXT_CLEAR_TRAINING
 	EN	Clear Training Data
+
+BLISSMIXEREXT_LEARNING_START_TIME
+	EN	Start:
+
+BLISSMIXEREXT_LEARNING_DURATION
+	EN	Duration:
+
+BLISSMIXEREXT_LEARNING_STATUS
+	EN	Status:
+
+BLISSMIXEREXT_LEARNING_FAILED
+	EN	Learning failed unexpectedly. Check the Lyrion server log for details.
 
 BLISSMIXEREXT_BACKUP_PATH
 	EN	Training data backup folder

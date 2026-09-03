@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.6 - 2026-09-03
+
+- Show the same live metric-learning details as BlissMixer: start time,
+  elapsed duration, and the learner's current training phase and progress.
+- Poll learner status every second while training and return to slower idle
+  polling after completion.
+- Route native learner notifications to the independent `blissmixerext`
+  command without changing the original BlissMixer notification contract.
+- Clarify that the displayed compatible BlissMixer version is the installed,
+  enabled version detected live by LMS.
+
 ## 0.1.5 - 2026-09-03
 
 - Rename the user-facing plugin to **Bliss Mixer Extensions**.

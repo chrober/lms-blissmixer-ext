@@ -22,6 +22,19 @@ BEGIN {
     }
     $INC{'Slim/Utils/Prefs.pm'} = __FILE__;
 
+    package TestLearnerProcess;
+    sub alive { return 1 }
+    sub die { return }
+
+    package Proc::Background;
+    our @arguments;
+    sub new {
+        my $class = shift;
+        @arguments = @_;
+        return bless {}, 'TestLearnerProcess';
+    }
+    $INC{'Proc/Background.pm'} = __FILE__;
+
     package TestSurveyLog;
     sub warn { return }
     sub info { return }
@@ -67,6 +80,7 @@ my $database = File::Spec->catfile($temporary, 'bliss.db');
 my $matrix = File::Spec->catfile($temporary, 'learned_matrix.json');
 my $triplets = File::Spec->catfile($temporary, 'training_triplets.json');
 $TestSurveyPrefs::values{triplets_backup_path} = $temporary;
+$TestSurveyPrefs::values{httpport} = 9123;
 
 Plugins::BlissMixerExt::Survey::init($database, $matrix, $triplets);
 is(Plugins::BlissMixerExt::Survey::matrixPath(), $matrix,
@@ -108,6 +122,15 @@ like(Plugins::BlissMixerExt::Survey::_startLearning(), qr/analysis is running/,
 $Plugins::BlissMixerExt::Plugin::analyser_running = 0;
 like(Plugins::BlissMixerExt::Survey::_startLearning(), qr/Not enough training data \(2 triplets\)/,
     'learning requires the minimum number of survey rounds');
+
+Plugins::BlissMixerExt::Survey::_saveTriplets([($training->[0]) x 10]);
+is(Plugins::BlissMixerExt::Survey::_startLearning(), 'Learning started',
+    'learning starts when sufficient training data is available');
+my $learner_command = join ' ', @Proc::Background::arguments;
+like($learner_command,
+    qr/--lms 127\.0\.0\.1 --json 9123 --notifs --lms-command blissmixerext/,
+    'the learner sends its detailed progress to the sidecar command');
+Plugins::BlissMixerExt::Survey::_stopLearning();
 
 open my $matrix_fh, '>', $matrix or die "Cannot create $matrix: $!";
 print {$matrix_fh} 'old matrix';

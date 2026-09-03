@@ -29,6 +29,7 @@ use Slim::Utils::Prefs;
 
 my $log = logger('plugin.blissmixerext');
 my $prefs = preferences('plugin.blissmixerext');
+my $serverPrefs = preferences('server');
 
 my $SURVEY_PAGE_RE = qr{blissmixerext/survey\.html}i;
 my $SURVEY_API_RE  = qr{blissmixerext/survey-api}i;
@@ -118,7 +119,6 @@ sub cliCommand {
         $request->setStatusDone();
     } elsif ($act eq 'run-learning') {
         my $msg = _startLearning();
-        $lastLearnerMsg = $msg;
         $request->addResult("msg", $msg);
         $request->setStatusDone();
     } elsif ($act eq 'stop-learning') {
@@ -332,8 +332,12 @@ sub _startLearning {
 
     unlink $learningOutputPath if -e $learningOutputPath;
 
+    my $httpPort = $serverPrefs->get('httpport') || 9000;
+
     my @params = ($learnerBinary, "--db", $dbPath, "--triplets", $tripletsPath,
                   "--output", $learningOutputPath,
+                  "--lms", "127.0.0.1", "--json", $httpPort, "--notifs",
+                  "--lms-command", "blissmixerext",
                   "--logging", "error");
 
     main::INFOLOG && $log->info("Starting metric learning: " . join(' ', @params));

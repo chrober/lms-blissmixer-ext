@@ -5,8 +5,8 @@ consume checksum-verified assets from the native component repositories.
 
 - Mixer release: `v0.9.0`
 - Mixer commit: `7f4a72506e8e2db6a11e9f53b2bf1b43244c1184`
-- Learner release: `v0.1.0`
-- Learner commit: `063d165782fd6d9c1acb2378c8e5e2e2eb985c51`
+- Learner release: `v0.1.1`
+- Learner commit: `2b92fdfb96192e2d6cc690383894fcb255d5d1c0`
 
 The plugin release workflow downloads the five platform assets and their
 `.sha256` files from each release, verifies them, and installs them under these

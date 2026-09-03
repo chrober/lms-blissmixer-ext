@@ -30,11 +30,11 @@
         <table style="margin:12px 0">
             <tr><td>[% "BLISSMIXEREXT_TRIPLETS" | string %]</td><td id="triplet-count">-</td></tr>
             <tr><td>[% "BLISSMIXEREXT_MATRIX" | string %]</td><td id="matrix-status">-</td></tr>
-            <tr><td>Status:</td><td id="learning-status">-</td></tr>
         </table>
 
         <button id="learning-button" onclick="toggleLearning()" type="button">[% "BLISSMIXEREXT_RUN_LEARNING" | string %]</button>
-        <button onclick="clearTraining()" type="button">[% "BLISSMIXEREXT_CLEAR_TRAINING" | string %]</button>
+        <button id="clear-training-button" onclick="clearTraining()" type="button">[% "BLISSMIXEREXT_CLEAR_TRAINING" | string %]</button>
+        <div id="learning-status" style="margin-top:8px"></div>
     [% END %]
 
     [% WRAPPER settingGroup title="BLISSMIXEREXT_BACKUP_PATH" desc="BLISSMIXEREXT_BACKUP_PATH_DESC" %]
@@ -53,6 +53,10 @@
 
 <script type="text/javascript">
     let learningRunning = false;
+    let learningInterval;
+    let learningIntervalDuration = 5000;
+    let learningStatusCount = 0;
+    let learningErrorMessage = null;
     let restoreIsRunning = false;
     let restoreLastSeenPath = '';
     let restoreWatchInterval;
@@ -75,26 +79,79 @@
         try {
             const response = await extCommand('status');
             const result = response.result || {};
+            learningStatusCount++;
             learningRunning = parseInt(result.learning || 0) === 1;
             document.getElementById('triplet-count').textContent = result.triplets || 0;
             document.getElementById('matrix-status').textContent = parseInt(result.matrix_exists || 0) === 1
                 ? '[% "BLISSMIXEREXT_MATRIX_AVAILABLE" | string %]'
                 : '[% "BLISSMIXEREXT_MATRIX_MISSING" | string %]';
-            document.getElementById('learning-status').textContent = result.failed
-                ? 'Failed - check the server log'
-                : (result.msg || (learningRunning ? 'Running' : 'Idle'));
             const button = document.getElementById('learning-button');
+            const clearButton = document.getElementById('clear-training-button');
             button.textContent = learningRunning
                 ? '[% "BLISSMIXEREXT_STOP_LEARNING" | string %]'
                 : '[% "BLISSMIXEREXT_RUN_LEARNING" | string %]';
+            if (clearButton) clearButton.style.display = learningRunning ? 'none' : '';
+
+            const status = document.getElementById('learning-status');
+            if (learningRunning) learningErrorMessage = null;
+            if (!learningRunning && parseInt(result.failed || 0) === 1) {
+                learningErrorMessage = '[% learning_failed_text %]';
+            }
+            if (learningErrorMessage) {
+                status.textContent = learningErrorMessage;
+            } else {
+                let message = '<table>';
+                if (result.start !== undefined) {
+                    const date = new Date(parseInt(result.start, 10) * 1000);
+                    message += '<tr><td>[% learning_start_text %]</td><td>'
+                        + date.toLocaleDateString() + ' ' + date.toLocaleTimeString()
+                        + '</td></tr>';
+                    if (result.duration !== undefined) {
+                        const seconds = parseInt(result.duration, 10);
+                        const duration = [
+                            parseInt(seconds / 60 / 60, 10),
+                            parseInt(seconds / 60 % 60, 10),
+                            parseInt(seconds % 60, 10)
+                        ].join(':').replace(/\b(\d)\b/g, '0$1');
+                        message += '<tr><td>[% learning_duration_text %]</td><td>'
+                            + duration + '</td></tr>';
+                    }
+                }
+                if (learningRunning && result.msg !== undefined) {
+                    message += '<tr><td>[% learning_status_text %]</td><td>'
+                        + result.msg + '</td></tr>';
+                }
+                message += '</table>';
+                status.innerHTML = result.start !== undefined ? message : '';
+            }
+
+            if (learningRunning && learningIntervalDuration > 1000) {
+                setLearningInterval(1000);
+            } else if (!learningRunning && learningIntervalDuration < 5000
+                    && learningStatusCount > 5) {
+                setLearningInterval(5000);
+            }
         } catch (error) {
             document.getElementById('learning-status').textContent = error.message;
         }
     }
 
+    function setLearningInterval(milliseconds) {
+        learningIntervalDuration = milliseconds;
+        if (learningInterval) clearInterval(learningInterval);
+        learningInterval = setInterval(refreshLearning, learningIntervalDuration);
+    }
+
     async function toggleLearning() {
-        await extCommand(learningRunning ? 'stop-learning' : 'run-learning');
-        await refreshLearning();
+        const response = await extCommand(learningRunning ? 'stop-learning' : 'run-learning');
+        const message = response && response.result ? response.result.msg : undefined;
+        if (message === 'Learning started' || message === 'stopped') {
+            learningErrorMessage = null;
+            await refreshLearning();
+        } else if (message) {
+            learningErrorMessage = message;
+            document.getElementById('learning-status').textContent = message;
+        }
     }
 
     async function clearTraining() {
@@ -187,7 +244,7 @@
     window.addEventListener('load', () => {
         if (document.getElementById('learning-button')) {
             refreshLearning();
-            setInterval(refreshLearning, 3000);
+            setLearningInterval(5000);
         }
         updateBackupButtonState();
         setRestorePathFromBackupFolder();
@@ -205,6 +262,7 @@
     });
 
     window.addEventListener('beforeunload', () => {
+        if (learningInterval) clearInterval(learningInterval);
         if (restoreWatchInterval) clearInterval(restoreWatchInterval);
     });
 </script>

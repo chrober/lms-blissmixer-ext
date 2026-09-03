@@ -40,6 +40,10 @@ the upstream Bliss Mixer settings, configure experimental options on the
 BlissMixerExt settings page, and select **Bliss (Ext)** under Don't Stop the
 Music.
 
+Metric learning reports its live start time, elapsed duration, and current
+native training phase on the settings page. The installed upstream BlissMixer
+version shown under Companion status is read from LMS's loaded plugin manifest.
+
 ## Compatibility and isolation
 
 The sidecar deliberately does not register an analyser, importer, Bliss Mixer

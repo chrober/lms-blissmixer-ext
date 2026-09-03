@@ -35,6 +35,7 @@ required = {
     "canonical learned matrix": "'learned_matrix.json'",
     "canonical training triplets": "'training_triplets.json'",
     "legacy data migration": "_migrateLearningFile",
+    "sidecar learner notifications": '"--lms-command", "blissmixerext"',
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source:
@@ -120,6 +121,16 @@ referenced_tokens = {
 for token in referenced_tokens:
     if token and token not in string_tokens:
         fail(f"missing localized string token: {token}")
+
+for learner_status_contract in (
+    "learning_start_text",
+    "learning_duration_text",
+    "learning_status_text",
+    "learning_failed_text",
+    "setLearningInterval(1000)",
+):
+    if learner_status_contract not in settings + settings_source:
+        fail(f"settings page is missing live learner status: {learner_status_contract}")
 
 release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 for requirement in (
