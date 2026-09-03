@@ -19,6 +19,15 @@ are proposed for upstream Bliss Mixer.
 - The standard **Bliss** and experimental **Bliss (Ext)** DSTM providers can be
   installed and selected side by side.
 
+The track context menu also contains **Similar tracks (Ext)** and **Similar
+tracks by artist (Ext)**. Track, album, and artist menus contain **Create bliss
+mix (Ext)**. These entries use the separate Ext mixer and honor Bliss Mixer's
+configured strategy and filters. The mix action supports all configured
+strategies. A one-track similarity request uses the learned matrix when
+adaptive weighting is selected; static weighting uses the configured metric
+sliders. Extended isolation forest cannot be trained from a single similarity
+seed, so that case falls back to static weighting.
+
 BlissMixerExt currently requires Bliss Mixer 0.10.0 or newer and LMS 9.0 or
 newer.
 
@@ -66,8 +75,9 @@ DEBUG level.
 ## Compatibility and isolation
 
 The sidecar deliberately does not register an analyser, importer, Bliss Mixer
-URL protocol, or replacement context-menu handlers. Its mixer listens only on a
-separate automatically selected loopback port. It checks whether the
+URL protocol, or replacement context-menu handlers. Its uniquely named Ext
+context-menu providers coexist with the upstream actions. Its mixer listens
+only on a separate automatically selected loopback port. It checks whether the
 upstream analyser is active and reloads its mixer when `bliss.db` changes.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the staging and migration model.

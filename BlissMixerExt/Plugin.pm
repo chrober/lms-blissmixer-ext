@@ -25,6 +25,7 @@ use Slim::Utils::Misc;
 use Slim::Utils::OSDetect;
 use Slim::Utils::PluginManager;
 use Slim::Utils::Prefs;
+use Slim::Utils::Strings qw(cstring);
 use Slim::Utils::Versions;
 
 use Plugins::BlissMixerExt::Settings;
@@ -36,6 +37,9 @@ use constant NUM_FOREST_SEED_TRACKS => 10;
 use constant NUM_SEED_TRACKS => 5;
 use constant MAX_PREVIOUS_TRACKS => 200;
 use constant DEF_MAX_PREVIOUS_TRACKS => 100;
+use constant NUM_MIX_TRACKS_FEW => 20;
+use constant NUM_MIX_TRACKS => 50;
+use constant NUM_LIST_TRACKS => 50;
 use constant DB_NAME  => "bliss.db";
 use constant STOP_MIXER => 60 * 60;
 use constant MAX_MIXER_START_CHECKS => 10;
@@ -107,6 +111,31 @@ sub initPlugin {
     #                                                            |  |  |  |Function to call
     #                                                            C  Q  T  F
     Slim::Control::Request::addDispatch(['blissmixerext', '_cmd'], [0, 0, 1, \&_cliCommand]);
+
+    Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextmix => (
+        above    => 'favorites',
+        func     => \&trackInfoHandler,
+    ) );
+
+    Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextsimilarity => (
+        above    => 'favorites',
+        func     => \&similarTracksHandler,
+    ) );
+
+    Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextsimilaritybyartist => (
+        above    => 'favorites',
+        func     => \&similarTracksByArtistHandler,
+    ) );
+
+    Slim::Menu::AlbumInfo->registerInfoProvider( blissmixerextmix => (
+        below    => 'addalbum',
+        func     => \&albumInfoHandler,
+    ) );
+
+    Slim::Menu::ArtistInfo->registerInfoProvider( blissmixerextmix => (
+        below    => 'addartist',
+        func     => \&artistInfoHandler,
+    ) );
 
     my $dbDir = Slim::Utils::Prefs::dir() || Slim::Utils::OSDetect::dirsFor('prefs');
     $dbPath = $dbDir . "/" . DB_NAME;
@@ -377,7 +406,7 @@ sub _cliCommand {
     }
 
     my $cmd = $request->getParam('_cmd');
-    if ($request->paramUndefinedOrNotOneOf($cmd, ['port', 'stop', 'survey'])) {
+    if ($request->paramUndefinedOrNotOneOf($cmd, ['port', 'stop', 'survey', 'mix', 'list'])) {
         $request->setStatusBadParams();
         return;
     }
@@ -399,8 +428,92 @@ sub _cliCommand {
         return;
     }
 
-    Plugins::BlissMixerExt::Survey::cliCommand($request);
+    if ($cmd eq 'survey') {
+        Plugins::BlissMixerExt::Survey::cliCommand($request);
+        return;
+    }
+
+    my $count = $request->getParam('count') || -1;
+    my @seedsToUse = ();
+    if ($request->getParam('track_id')) {
+        my ($trackObj) = Slim::Schema->find('Track', $request->getParam('track_id'));
+        if ($trackObj) {
+            main::DEBUGLOG && $log->debug("BlissMix Ext track seed " . $trackObj->path);
+            push @seedsToUse, $trackObj;
+        }
+    } else {
+        my $sql;
+        my $col = 'track';
+        my $param;
+        my $dbh = Slim::Schema->dbh;
+        my $useForest = $prefs->get('use_forest') || 0;
+        my $useAdaptiveWeights = $prefs->get('use_adaptive_weights') || 0;
+        my $numSeedTracks = $useAdaptiveWeights
+            ? ($prefs->get('num_seed_tracks') || 3)
+            : ($useForest ? NUM_FOREST_SEED_TRACKS : NUM_SEED_TRACKS);
+        if ($request->getParam('artist_id')) {
+            $sql = $dbh->prepare_cached( qq{SELECT track FROM contributor_track WHERE contributor = ?} );
+            $param = $request->getParam('artist_id');
+        } elsif ($request->getParam('album_id')) {
+            $sql = $dbh->prepare_cached( qq{SELECT id FROM tracks WHERE album = ?} );
+            $col = 'id';
+            $param = $request->getParam('album_id');
+        } elsif ($request->getParam('genre_id')) {
+            $sql = $dbh->prepare_cached( qq{SELECT track FROM genre_track WHERE genre = ?} );
+            $param = $request->getParam('genre_id');
+        } else {
+            $request->setStatusBadDispatch();
+            return;
+        }
+
+        $sql->execute($param);
+        if (my $result = $sql->fetchall_arrayref({})) {
+            foreach my $res (@$result) {
+                my ($trackObj) = Slim::Schema->find('Track', $res->{$col});
+                push @seedsToUse, $trackObj if $trackObj;
+            }
+        }
+        if (scalar @seedsToUse > $numSeedTracks) {
+            Slim::Player::Playlist::fischer_yates_shuffle(\@seedsToUse);
+            @seedsToUse = splice(@seedsToUse, 0, $numSeedTracks);
+        }
+    }
+
+    main::DEBUGLOG && $log->debug("Number of tracks for BlissMix Ext: " . scalar(@seedsToUse));
+    if (@seedsToUse) {
+        if ($cmd eq 'mix') {
+            my $numTracks = @seedsToUse > 2 ? NUM_MIX_TRACKS : NUM_MIX_TRACKS_FEW;
+            $numTracks = $count if $count > 0 && $count < $numTracks;
+            my $jsonData = _getMixData(
+                \@seedsToUse, undef, $numTracks, 1,
+                $prefs->get('filter_genres') || 0,
+            );
+            Slim::Player::Playlist::fischer_yates_shuffle(\@seedsToUse);
+            if (0 == _callApi(
+                $request, $jsonData, $numTracks, $seedsToUse[0], 'mix', 0,
+            )) {
+                $request->setStatusProcessing();
+            }
+        } else {
+            my $numTracks = NUM_LIST_TRACKS;
+            $numTracks = $count if $count > 0 && $count < $numTracks;
+            my $jsonData = _getListData(
+                $seedsToUse[0], $numTracks,
+                $prefs->get('filter_genres') || 0,
+                $request->getParam('byArtist') || 0,
+            );
+            if (0 == _callApi(
+                $request, $jsonData, $numTracks, undef, 'list', 0,
+            )) {
+                $request->setStatusProcessing();
+            }
+        }
+        return;
+    }
+
+    $request->setStatusBadDispatch();
 }
+
 sub _getMixableProperties {
     my ($client, $count, $strict) = @_;
 
@@ -596,9 +709,7 @@ sub _pathToTrack {
     }
 }
 
-sub _dstmMix {
-    my ($client, $cb, $filterGenres, $callCount) = @_;
-
+sub _refreshMixerDatabase {
     my $analysisRunning = _originalAnalyserRunning();
     my $currentDbSignature = _databaseSignature();
     my $refreshAction = _databaseRefreshAction(
@@ -622,6 +733,265 @@ sub _dstmMix {
             : 'Upstream bliss.db changed; restarting bliss-mixer-ext');
         _stopMixer();
     }
+}
+
+sub _callApi {
+    my ($request, $jsonData, $maxTracks, $seedToAdd, $api, $callCount) = @_;
+
+    _refreshMixerDatabase();
+    if (_weightParam() ne $lastWeights) {
+        _stopMixer();
+    }
+
+    if (!$mixer || !$mixer->alive || $mixerPort < 1) {
+        if ($mixerBinary && $callCount < MAX_MIXER_START_CHECKS) {
+            $callCount++;
+            if (_startMixer(0) == 1) {
+                Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 1, sub {
+                    _callApi(
+                        $request, $jsonData, $maxTracks, $seedToAdd,
+                        $api, $callCount,
+                    );
+                });
+                return 0;
+            }
+        }
+        main::DEBUGLOG && $log->debug('Failed to start bliss-mixer-ext');
+        $request->setStatusDone();
+        $lastMixerStart = 0;
+        return 1;
+    }
+
+    _resetMixerTimeout();
+    my $url = "http://localhost:$mixerPort/api/$api";
+    main::DEBUGLOG && $log->debug("Call $url");
+    $request->setStatusProcessing();
+    Slim::Networking::SimpleAsyncHTTP->new(
+        sub {
+            my $response = shift;
+            main::DEBUGLOG && $log->debug(
+                'Received Ext API response: '
+                . ($response->headers->header('X-Bliss-Debug') || $response->content)
+            );
+
+            my @songs = split(/\n/, $response->content);
+            my $tags = $request->getParam('tags') || 'al';
+            my $menuMode = defined $request->getParam('menu');
+            my $loopname = $menuMode ? 'item_loop' : 'titles_loop';
+            my $chunkCount = 0;
+            my $useContextMenu = $request->getParam('useContextMenu');
+            my @usableTracks = ();
+            my @ids = ();
+            my $mediaDirs = Slim::Utils::Misc::getMediaDirs('audio');
+
+            if ($seedToAdd) {
+                push @usableTracks, $seedToAdd;
+                push @ids, $seedToAdd->id;
+            }
+
+            foreach my $track (@songs) {
+                my $trackObj = _pathToTrack($mediaDirs, $track);
+                if (blessed $trackObj
+                    && (!$seedToAdd || $trackObj->id != $seedToAdd->id)) {
+                    push @usableTracks, $trackObj;
+                    push @ids, $trackObj->id;
+                    main::DEBUGLOG && $log->debug("...$track");
+                    last if @ids >= $maxTracks;
+                }
+            }
+
+            if ($menuMode) {
+                my $idList = join(',', @ids);
+                my $base = {
+                    actions => {
+                        go => {
+                            cmd => ['trackinfo', 'items'],
+                            params => {
+                                menu => 'nowhere',
+                                useContextMenu => '1',
+                            },
+                            itemsParams => 'params',
+                        },
+                        play => {
+                            cmd => ['playlistcontrol'],
+                            params => { cmd => 'load', menu => 'nowhere' },
+                            nextWindow => 'nowPlaying',
+                            itemsParams => 'params',
+                        },
+                        add => {
+                            cmd => ['playlistcontrol'],
+                            params => { cmd => 'add', menu => 'nowhere' },
+                            itemsParams => 'params',
+                        },
+                        'add-hold' => {
+                            cmd => ['playlistcontrol'],
+                            params => { cmd => 'insert', menu => 'nowhere' },
+                            itemsParams => 'params',
+                        },
+                    },
+                };
+                if ($useContextMenu) {
+                    $base->{actions}->{more} = $base->{actions}->{go};
+                    $base->{actions}->{go} = $base->{actions}->{play};
+                }
+                $request->addResult('base', $base);
+                $request->addResult('offset', 0);
+                $request->addResult('window', {
+                    windowStyle => 'icon_list',
+                    text => $request->string('BLISSMIXEREXT_DSTM'),
+                });
+
+                $request->addResultLoop(
+                    $loopname, $chunkCount, 'nextWindow', 'nowPlaying',
+                );
+                $request->addResultLoop(
+                    $loopname, $chunkCount, 'text',
+                    $request->string('BLISSMIXER_PLAYTHISMIX'),
+                );
+                $request->addResultLoop(
+                    $loopname, $chunkCount, 'icon-id', '/html/images/playall.png',
+                );
+                my $actions = {
+                    go => {
+                        cmd => ['playlistcontrol', 'cmd:load', 'menu:nowhere', "track_id:$idList"],
+                    },
+                    play => {
+                        cmd => ['playlistcontrol', 'cmd:load', 'menu:nowhere', "track_id:$idList"],
+                    },
+                    add => {
+                        cmd => ['playlistcontrol', 'cmd:add', 'menu:nowhere', "track_id:$idList"],
+                    },
+                    'add-hold' => {
+                        cmd => ['playlistcontrol', 'cmd:insert', 'menu:nowhere', "track_id:$idList"],
+                    },
+                };
+                $request->addResultLoop(
+                    $loopname, $chunkCount, 'actions', $actions,
+                );
+                $chunkCount++;
+            }
+
+            foreach my $trackObj (@usableTracks) {
+                if ($menuMode) {
+                    Slim::Control::Queries::_addJiveSong(
+                        $request, $loopname, $chunkCount, $chunkCount, $trackObj,
+                    );
+                } else {
+                    Slim::Control::Queries::_addSong(
+                        $request, $loopname, $chunkCount, $trackObj, $tags,
+                    );
+                }
+                $chunkCount++;
+            }
+            main::DEBUGLOG && $log->debug("Number of Ext result items: $chunkCount");
+            $request->addResult('count', $chunkCount);
+            $request->setStatusDone();
+        },
+        sub {
+            my $response = shift;
+            main::DEBUGLOG && $log->debug(
+                'Failed to fetch Ext API URL: ' . $response->error
+            );
+            $request->setStatusDone();
+        }
+    )->post(
+        $url,
+        'Timeout' => ($prefs->get('timeout') || 30),
+        'Content-Type' => 'application/json;charset=utf-8',
+        $jsonData,
+    );
+    return 1;
+}
+
+sub trackInfoHandler {
+    return _objectInfoHandler('track', @_);
+}
+
+sub albumInfoHandler {
+    return _objectInfoHandler('album', @_);
+}
+
+sub artistInfoHandler {
+    return _objectInfoHandler('artist', @_);
+}
+
+sub _objectInfoHandler {
+    my ($objectType, $client, $url, $obj, $remoteMeta, $tags) = @_;
+    my $actionParam = $objectType eq 'album' ? 'album_id'
+                    : $objectType eq 'artist' ? 'artist_id'
+                    : 'track_id';
+
+    return {
+        type => 'redirect',
+        jive => {
+            actions => {
+                go => {
+                    player => 0,
+                    cmd => ['blissmixerext', 'mix'],
+                    params => {
+                        menu => 1,
+                        useContextMenu => 1,
+                        $actionParam => $obj->id,
+                    },
+                },
+            },
+        },
+        name => cstring($client, 'BLISSMIXEREXT_CREATE_MIX'),
+        favorites => 0,
+        player => {
+            mode => 'blissmixerext_mix',
+            modeParams => { $actionParam => $obj->id },
+        },
+    };
+}
+
+sub _trackSimilarityHandler {
+    my ($byArtist, $client, $url, $obj, $remoteMeta, $tags) = @_;
+    return {
+        type => 'redirect',
+        jive => {
+            actions => {
+                go => {
+                    player => 0,
+                    cmd => ['blissmixerext', 'list'],
+                    params => {
+                        menu => 1,
+                        useContextMenu => 1,
+                        track_id => $obj->id,
+                        byArtist => $byArtist,
+                    },
+                },
+            },
+        },
+        name => cstring(
+            $client,
+            $byArtist
+                ? 'BLISSMIXEREXT_SIMILAR_TRACKS_BY_ARTIST'
+                : 'BLISSMIXEREXT_SIMILAR_TRACKS',
+        ),
+        favorites => 0,
+        player => {
+            mode => 'blissmixerext_list',
+            modeParams => {
+                track_id => $obj->id,
+                byArtist => $byArtist,
+            },
+        },
+    };
+}
+
+sub similarTracksHandler {
+    return _trackSimilarityHandler(0, @_);
+}
+
+sub similarTracksByArtistHandler {
+    return _trackSimilarityHandler(1, @_);
+}
+
+sub _dstmMix {
+    my ($client, $cb, $filterGenres, $callCount) = @_;
+
+    _refreshMixerDatabase();
 
     if (_weightParam() ne $lastWeights) {
         _stopMixer();
@@ -1548,6 +1918,33 @@ sub _getMixData {
                         allgenres   => int($prefs->get('match_all_genres') || 0),
                         main::DEBUGLOG ? (debug => 1) : ()
                     });
+    main::DEBUGLOG && $log->debug("Request $jsonData");
+    return $jsonData;
+}
+
+sub _getListData {
+    my ($seedTrack, $trackCount, $filterGenres, $byArtist) = @_;
+    my $mediaDirs = Slim::Utils::Misc::getMediaDirs('audio');
+
+    my $filterXmas = 1;
+    my $filterXmasPref = $prefs->get('filter_xmas');
+    $filterXmas = int($filterXmasPref) if defined $filterXmasPref;
+
+    my $jsonData = to_json({
+        count => int($trackCount),
+        filtergenre => int($filterGenres),
+        filterxmas => $filterXmas,
+        min => int($prefs->get('min_duration') || 0),
+        max => int($prefs->get('max_duration') || 0),
+        maxbpmdiff => int($prefs->get('max_bpm_diff') || 0),
+        track => _trackToPath($mediaDirs, $seedTrack),
+        genregroups => _genreGroups(),
+        allgenres => int($prefs->get('match_all_genres') || 0),
+        byartist => int($byArtist),
+        adaptiveweights => int($prefs->get('use_adaptive_weights') || 0),
+        learnedblend => int($extprefs->get('learned_blend') // 50),
+    });
+
     main::DEBUGLOG && $log->debug("Request $jsonData");
     return $jsonData;
 }

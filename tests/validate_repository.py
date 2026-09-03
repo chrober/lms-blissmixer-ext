@@ -42,6 +42,9 @@ required = {
     "shared Last.fm/play-count pool": "_candidatePoolMultiplier",
     "Last.fm similar-track lookup": "getSimilarTracks",
     "bounded Last.fm evidence deadline": "LASTFM_EVIDENCE_TIMEOUT",
+    "Ext mix context action": "BLISSMIXEREXT_CREATE_MIX",
+    "Ext similar-tracks context action": "BLISSMIXEREXT_SIMILAR_TRACKS",
+    "adaptive similar-track request": "adaptiveweights => int($prefs->get('use_adaptive_weights') || 0)",
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source + lastfm_track_source:
@@ -62,7 +65,9 @@ if "temporarily unavailable" in plugin_source:
 for forbidden in (
     "Plugins::BlissMixerExt::Analyser",
     "Plugins::BlissMixerExt::Importer",
-    "registerInfoProvider(",
+    "registerInfoProvider( blissmix =>",
+    "registerInfoProvider( blisssimilarity =>",
+    "registerInfoProvider( blisssimilaritybyartist =>",
     "registerHandler(\n        blissmixer =>",
 ):
     if forbidden in plugin_source:
@@ -154,6 +159,13 @@ if (
     fail("plugin description must identify experimental and early-access extensions")
 if "BLISSMIXEREXT_DSTM\n\tEN\tBliss (Ext)" not in strings_source:
     fail("the Bliss (Ext) DSTM provider display name must remain stable")
+for token, label in {
+    "BLISSMIXEREXT_CREATE_MIX": "Create bliss mix (Ext)",
+    "BLISSMIXEREXT_SIMILAR_TRACKS": "Similar tracks (Ext)",
+    "BLISSMIXEREXT_SIMILAR_TRACKS_BY_ARTIST": "Similar tracks by artist (Ext)",
+}.items():
+    if f"{token}\n\tEN\t{label}" not in strings_source:
+        fail(f"missing Ext context-menu label: {label}")
 for implementation_detail in (
     "larger candidate pool",
     "share the same pool",
@@ -203,6 +215,9 @@ if "_dstmMix" not in drift_config.get("adapted_from_upstream", []):
     fail("DSTM drift check must track the adapted _dstmMix routine")
 if "_getMixData" not in drift_config.get("adapted_from_upstream", []):
     fail("DSTM drift check must track the adapted _getMixData routine")
+for routine in ("initPlugin", "_cliCommand", "_callApi", "_objectInfoHandler", "_trackSimilarityHandler", "_getListData"):
+    if routine not in drift_config.get("adapted_from_upstream", []):
+        fail(f"DSTM drift check must track the adapted {routine} routine")
 
 drift_workflow = (ROOT / ".github/workflows/dstm-drift.yml").read_text(encoding="utf-8")
 for requirement in (

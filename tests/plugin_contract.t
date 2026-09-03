@@ -27,6 +27,14 @@ BEGIN {
             _ts_use_track_genre => 1,
             genre_groups => " Rock ; Hard Rock \n Jazz* ; \n ; Ambient ",
             use_track_genre => 0,
+            use_adaptive_weights => 1,
+            num_seed_tracks => 3,
+            filter_xmas => 1,
+            filter_genres => 1,
+            min_duration => 30,
+            max_duration => 600,
+            max_bpm_diff => 20,
+            match_all_genres => 0,
         },
         'plugin.blissmixerext' => {
             learned_blend => 50,
@@ -91,6 +99,18 @@ BEGIN {
     }
     $INC{'Slim/Utils/Versions.pm'} = __FILE__;
 
+    package Slim::Utils::Strings;
+    sub cstring { return $_[1] }
+    sub import {
+        no strict 'refs';
+        *{caller() . '::cstring'} = \&cstring;
+    }
+    $INC{'Slim/Utils/Strings.pm'} = __FILE__;
+
+    package Slim::Utils::Unicode;
+    sub utf8decode_locale { return $_[0] }
+    $INC{'Slim/Utils/Unicode.pm'} = __FILE__;
+
     package LWP::UserAgent;
     sub new { return bless {}, $_[0] }
     sub timeout { return }
@@ -145,6 +165,9 @@ BEGIN {
     sub artistName { return $_[0]->{artist} }
     sub title { return $_[0]->{title} }
     sub musicbrainz_id { return $_[0]->{mbid} }
+    sub id { return $_[0]->{id} // 42 }
+    sub path { return $_[0]->{path} // ('/music/' . $_[0]->{url}) }
+    sub tracknum { return 0 }
 }
 
 use lib "$FindBin::Bin/..";
@@ -412,6 +435,62 @@ is_deeply(
     [['Rock', 'Hard Rock'], ['Jazz*'], ['Ambient']],
     'genre groups are inherited from BlissMixer and trimmed without losing patterns',
 );
+
+my $menu_track = TestTrack->new('seed.flac', 0, 'Seed Artist', 'Seed Title');
+my $create_track = Plugins::BlissMixerExt::Plugin::trackInfoHandler(
+    undef, undef, $menu_track,
+);
+is($create_track->{name}, 'BLISSMIXEREXT_CREATE_MIX',
+    'track menu exposes Create bliss mix (Ext)');
+is_deeply($create_track->{jive}{actions}{go}{cmd}, ['blissmixerext', 'mix'],
+    'Ext mix action uses the sidecar command namespace');
+is($create_track->{jive}{actions}{go}{params}{track_id}, 42,
+    'track mix action forwards the track id');
+
+my $create_album = Plugins::BlissMixerExt::Plugin::_objectInfoHandler(
+    'album', undef, undef, $menu_track,
+);
+is($create_album->{jive}{actions}{go}{params}{album_id}, 42,
+    'album mix action forwards the album id');
+my $create_artist = Plugins::BlissMixerExt::Plugin::_objectInfoHandler(
+    'artist', undef, undef, $menu_track,
+);
+is($create_artist->{jive}{actions}{go}{params}{artist_id}, 42,
+    'artist mix action forwards the artist id');
+
+my $similar = Plugins::BlissMixerExt::Plugin::similarTracksHandler(
+    undef, undef, $menu_track,
+);
+is($similar->{name}, 'BLISSMIXEREXT_SIMILAR_TRACKS',
+    'track menu exposes Similar tracks (Ext)');
+is_deeply($similar->{jive}{actions}{go}{cmd}, ['blissmixerext', 'list'],
+    'Ext similarity action uses the sidecar command namespace');
+is($similar->{jive}{actions}{go}{params}{byArtist}, 0,
+    'general similarity action does not restrict the artist');
+
+my $similar_artist = Plugins::BlissMixerExt::Plugin::similarTracksByArtistHandler(
+    undef, undef, $menu_track,
+);
+is($similar_artist->{name}, 'BLISSMIXEREXT_SIMILAR_TRACKS_BY_ARTIST',
+    'track menu exposes Similar tracks by artist (Ext)');
+is($similar_artist->{jive}{actions}{go}{params}{byArtist}, 1,
+    'artist similarity action carries its artist restriction');
+is($similar_artist->{player}{modeParams}{byArtist}, 1,
+    'artist restriction is also retained for classic-player navigation');
+
+my $list_data = JSON::PP::decode_json(
+    Plugins::BlissMixerExt::Plugin::_getListData($menu_track, 50, 1, 1),
+);
+is($list_data->{track}, 'seed.flac',
+    'similarity request sends the seed path relative to the music folder');
+is($list_data->{adaptiveweights}, 1,
+    'similarity request respects the configured adaptive strategy');
+is($list_data->{learnedblend}, 50,
+    'similarity request includes the learned-matrix influence');
+is($list_data->{byartist}, 1,
+    'similarity request forwards the same-artist restriction');
+is($list_data->{filterxmas}, 1,
+    'similarity request inherits the upstream Christmas filter');
 
 is(Plugins::BlissMixerExt::Plugin->title(), 'BlissMixerExt',
     'plugin identity remains distinct from upstream');

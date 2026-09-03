@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Add distinct `Create bliss mix (Ext)` actions for track, album, and artist
+  context menus.
+- Add `Similar tracks (Ext)` and `Similar tracks by artist (Ext)` track
+  actions, routed exclusively through the sidecar mixer.
+- Pass the configured adaptive-weighting strategy and learned-matrix influence
+  to interactive similarity requests while retaining all upstream filters.
+- Extend the upstream-drift workflow to track the adapted interactive command,
+  menu, API-response, and request-payload routines.
+
 ## 0.3.2 - 2026-09-03
 
 - Add missing (mandatory) string token to strings.txt

@@ -17,15 +17,26 @@
     "_mixFailed",
     "_getPreviousTracks",
     "_fireComparisonQueue",
-    "_genreGroups"
+    "_genreGroups",
+    "trackInfoHandler",
+    "albumInfoHandler",
+    "artistInfoHandler",
+    "similarTracksHandler",
+    "similarTracksByArtistHandler"
   ],
   "adapted_from_upstream": [
+    "initPlugin",
     "postinitPlugin",
     "_pathToTrack",
     "_dstmMix",
     "_selectViaLastFm",
     "_getMixData",
-    "_buildComparisonJson"
+    "_buildComparisonJson",
+    "_cliCommand",
+    "_callApi",
+    "_objectInfoHandler",
+    "_trackSimilarityHandler",
+    "_getListData"
   ],
   "identity_normalizations": [
     ["Plugins::BlissMixerExt", "Plugins::BlissMixer"],
@@ -33,11 +44,17 @@
     ["blissmixerext", "blissmixer"]
   ],
   "intentional_adaptations": {
+    "initPlugin": "Registers uniquely named Ext context-menu providers and the independent blissmixerext command without registering upstream analyser, importer, or protocol components.",
     "postinitPlugin": "Registers Bliss (Ext) independently and applies the upstream compatibility gate.",
     "_pathToTrack": "Carries the sidecar's Windows path existence fix until it is present upstream.",
     "_dstmMix": "Owns the sidecar process, defers database refreshes during upstream analysis, and adds learned-matrix selection, play-count reranking, Last.fm similar-track guidance, blend handling, and experimental diagnostics.",
     "_selectViaLastFm": "Combines Last.fm recording and artist evidence with play-count influence over one shared candidate pool, applies a bounded deadline, and retains upstream artist-only behavior when the experimental signals are disabled.",
     "_getMixData": "Adds the learnedblend request property.",
-    "_buildComparisonJson": "Adds learnedblend overrides used by experimental comparison diagnostics."
+    "_buildComparisonJson": "Adds learnedblend overrides used by experimental comparison diagnostics.",
+    "_cliCommand": "Keeps the Ext-only port and survey commands while routing interactive mix and list requests to the sidecar binary with adaptive seed settings.",
+    "_callApi": "Uses the sidecar process, preserves deferred bliss.db refresh handling, and returns Ext-labelled context-menu results.",
+    "_objectInfoHandler": "Uses distinct BlissMixerExt menu labels, commands, and player modes.",
+    "_trackSimilarityHandler": "Uses distinct BlissMixerExt menu labels, commands, and player modes and retains by-artist mode parameters.",
+    "_getListData": "Adds the upstream filter_xmas setting plus adaptiveweights and learnedblend for learned-matrix similarity lists."
   }
 }
