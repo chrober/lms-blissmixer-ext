@@ -1,7 +1,7 @@
 package Plugins::BlissMixerExt::Plugin;
 
 #
-# Bliss Mixer Experimental companion for Lyrion Music Server
+# Bliss Mixer Extensions companion for Lyrion Music Server
 #
 # (c) 2022-2026 Craig Drummond
 # Additional sidecar adaptations (c) 2026 Christoph O'Bermair

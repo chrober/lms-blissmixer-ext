@@ -8,8 +8,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PLUGIN_NAME = "BlissMixerExt"
-PLUGIN_TITLE = "Bliss Mixer Experimental"
-PLUGIN_DESC = "Experimental companion features for Bliss Mixer"
+PLUGIN_TITLE = "Bliss Mixer Extensions"
+PLUGIN_DESC = "Experimental and early-access extensions for Bliss Mixer"
 PLUGIN_CREATOR = "Christoph O'Bermair"
 PLUGIN_CATEGORY = "playlists"
 PLUGIN_MIN_TARGET = "9.0"

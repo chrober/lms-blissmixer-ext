@@ -1,8 +1,8 @@
 BLISSMIXEREXT
-	EN	Bliss Mixer Experimental
+	EN	Bliss Mixer Extensions
 
 BLISSMIXEREXT_DESC
-	EN	Experimental companion features for Bliss Mixer
+	EN	Experimental and early-access extensions for Bliss Mixer
 
 BLISSMIXEREXT_DSTM
 	EN	Bliss (Ext)

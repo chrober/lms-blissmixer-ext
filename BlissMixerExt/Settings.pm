@@ -1,7 +1,7 @@
 package Plugins::BlissMixerExt::Settings;
 
 #
-# Bliss Mixer Experimental companion for Lyrion Music Server
+# Bliss Mixer Extensions companion for Lyrion Music Server
 #
 # Licence: GPL v3
 #

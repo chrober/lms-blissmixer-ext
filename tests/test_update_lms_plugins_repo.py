@@ -34,6 +34,16 @@ class UpdateFeedTest(unittest.TestCase):
             self.assertTrue(all(entry.get("version") == "0.1.0" for entry in ext))
             self.assertEqual([entry.findtext("url") for entry in ext], [item[1] for item in packages])
             self.assertEqual([entry.findtext("sha") for entry in ext], [item[2] for item in packages])
+            self.assertTrue(
+                all(entry.findtext("title") == "Bliss Mixer Extensions" for entry in ext)
+            )
+            self.assertTrue(
+                all(
+                    entry.findtext("desc")
+                    == "Experimental and early-access extensions for Bliss Mixer"
+                    for entry in ext
+                )
+            )
 
 
 if __name__ == "__main__":

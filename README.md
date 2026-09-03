@@ -1,6 +1,7 @@
-# Bliss Mixer Experimental
+# Bliss Mixer Extensions
 
-BlissMixerExt is an independent experimental companion plugin for
+BlissMixerExt is an independent extension plugin providing experimental and
+early-access features for
 [Lyrion Media Server](https://lyrion.org/). It requires the upstream
 [Bliss Mixer](https://github.com/CDrummond/lms-blissmixer) plugin and adds a
 separate **Bliss (Ext)** provider to Don't Stop the Music.
@@ -34,7 +35,7 @@ plugins directory and run:
 python download-binaries.py
 ```
 
-Enable both Bliss Mixer and Bliss Mixer Experimental. Run library analysis from
+Enable both Bliss Mixer and Bliss Mixer Extensions. Run library analysis from
 the upstream Bliss Mixer settings, configure experimental options on the
 BlissMixerExt settings page, and select **Bliss (Ext)** under Don't Stop the
 Music.

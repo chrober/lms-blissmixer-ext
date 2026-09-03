@@ -100,6 +100,17 @@ for line_number, line in enumerate(strings_source.splitlines(), start=1):
         fail(f"strings.txt line {line_number} is not a valid string token")
     string_tokens.add(line)
 
+if "BLISSMIXEREXT\n\tEN\tBliss Mixer Extensions" not in strings_source:
+    fail("display name must be Bliss Mixer Extensions")
+if (
+    "BLISSMIXEREXT_DESC\n"
+    "\tEN\tExperimental and early-access extensions for Bliss Mixer"
+    not in strings_source
+):
+    fail("plugin description must identify experimental and early-access extensions")
+if "BLISSMIXEREXT_DSTM\n\tEN\tBliss (Ext)" not in strings_source:
+    fail("the Bliss (Ext) DSTM provider display name must remain stable")
+
 referenced_tokens = {
     manifest.findtext("name"),
     manifest.findtext("description"),
