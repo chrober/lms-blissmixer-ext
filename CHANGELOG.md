@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 - 2026-09-03
+
+- Rename the user-facing plugin to **Bliss Mixer Extensions**.
+- Describe it as **Experimental and early-access extensions for Bliss Mixer**
+  while preserving the `BlissMixerExt` technical identity and **Bliss (Ext)**
+  Don't Stop the Music provider.
+
 ## 0.1.4 - 2026-09-03
 
 - Restore the established `learned_matrix.json`, `training_triplets.json`, and
