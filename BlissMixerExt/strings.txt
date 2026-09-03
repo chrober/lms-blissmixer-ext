@@ -68,7 +68,7 @@ BLISSMIXEREXT_BACKUP_PATH
 	EN	Training data backup folder
 
 BLISSMIXEREXT_BACKUP_PATH_DESC
-	EN	Folder where timestamped backup zip files are written. Save this setting before creating a backup.
+	EN	If set, backup zip files of the training triplets are stored in this folder. Backup filenames include a timestamp.
 
 BLISSMIXEREXT_BACKUP_NOW
 	EN	Backup now
@@ -83,10 +83,7 @@ BLISSMIXEREXT_RESTORE_PATH
 	EN	Restore from backup
 
 BLISSMIXEREXT_RESTORE_PATH_DESC
-	EN	Full path to a BlissMixerExt training-data backup zip.
-
-BLISSMIXEREXT_RESTORE
-	EN	Restore
+	EN	Choose a backup zip file to restore the training triplets.
 
 BLISSMIXEREXT_RESTORE_IN_PROGRESS
 	EN	Restoring backup...

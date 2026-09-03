@@ -54,6 +54,25 @@ if 'name="pref_mixer_port"' in settings:
     fail("settings page must not expose the sidecar's internal mixer port")
 if "sliderInput_0_100_1" not in settings:
     fail("learned matrix influence must use the LMS slider control")
+if not re.search(
+    r'<input type="text" class="stdedit selectFolder" '
+    r'name="pref_triplets_backup_path" id="triplets_backup_path" '
+    r'value="\[% prefs\.triplets_backup_path %\]" size="40">',
+    settings,
+):
+    fail("backup folder must use the same persistent folder-picker contract as BlissMixer")
+if '<input type="hidden" class="selectFile" id="restore_backup_path" value="">' not in settings:
+    fail("restore must use the same icon-only file-picker contract as BlissMixer")
+if 'id="restore_path"' in settings or '<button onclick="restoreBackup()"' in settings:
+    fail("restore must not expose the old text field or manual restore button")
+for behavior in (
+    "setRestorePathFromBackupFolder",
+    "watchRestorePathSelection",
+    "restoreWatchInterval = setInterval(watchRestorePathSelection, 250)",
+    "backupPath.addEventListener('change', updateBackupButtonState)",
+):
+    if behavior not in settings:
+        fail(f"backup/restore picker is missing upstream behavior: {behavior}")
 
 settings_source = (PLUGIN / "Settings.pm").read_text(encoding="utf-8")
 if "protectName('BLISSMIXEREXT')" not in settings_source:

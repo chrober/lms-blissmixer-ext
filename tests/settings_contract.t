@@ -86,6 +86,8 @@ ok($request_host{upstream_compatible}, 'compatible upstream is reported');
 ok(!$request_host{no_learner_binary}, 'available sidecar learner is reported');
 is($request_host{backup_success_text}, 'localized:BLISSMIXEREXT_BACKUP_SUCCESS',
     'dynamic JavaScript messages are localized before rendering');
+is($request_host{backup_now_text}, 'localized:BLISSMIXEREXT_BACKUP_NOW',
+    'backup button text is localized before rendering like upstream');
 
 my %fallback_host;
 Plugins::BlissMixerExt::Settings->beforeRender(\%fallback_host);

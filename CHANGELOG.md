@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 - 2026-09-03
+
+- Match BlissMixer's persistent training-data backup folder control.
+- Match BlissMixer's icon-only backup restore picker and automatic restore
+  behavior after selecting a ZIP file.
+
 ## 0.1.2 - 2026-09-02
 
 - Restore the LMS slider control for Learned matrix influence.

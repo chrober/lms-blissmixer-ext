@@ -38,15 +38,14 @@
     [% END %]
 
     [% WRAPPER settingGroup title="BLISSMIXEREXT_BACKUP_PATH" desc="BLISSMIXEREXT_BACKUP_PATH_DESC" %]
-        <input type="text" class="stdedit selectFolder" name="pref_triplets_backup_path" id="triplets_backup_path" value="[% prefs.triplets_backup_path %]" size="50">
-        <button onclick="backupNow()" type="button">[% "BLISSMIXEREXT_BACKUP_NOW" | string %]</button>
-        <span id="backup-status" style="margin-left:8px"></span>
+        <input type="text" class="stdedit selectFolder" name="pref_triplets_backup_path" id="triplets_backup_path" value="[% prefs.triplets_backup_path %]" size="40">
+        <button id="backup-now-btn" onclick="backupNow()" type="button" style="margin-left:8px" [% UNLESS prefs.triplets_backup_path %] disabled [% END %]>[% backup_now_text %]</button>
+        <span id="backup-now-status" style="margin-left:8px;opacity:0.8"></span>
     [% END %]
 
     [% WRAPPER settingGroup title="BLISSMIXEREXT_RESTORE_PATH" desc="BLISSMIXEREXT_RESTORE_PATH_DESC" %]
-        <input type="text" class="stdedit selectFile" id="restore_path" value="" size="50">
-        <button onclick="restoreBackup()" type="button">[% "BLISSMIXEREXT_RESTORE" | string %]</button>
-        <span id="restore-status" style="margin-left:8px"></span>
+        <input type="hidden" class="selectFile" id="restore_backup_path" value="">
+        <div id="restore-status" style="margin-top:4px;opacity:0.8"></div>
     [% END %]
 [% END %]
 
@@ -54,6 +53,9 @@
 
 <script type="text/javascript">
     let learningRunning = false;
+    let restoreIsRunning = false;
+    let restoreLastSeenPath = '';
+    let restoreWatchInterval;
 
     async function extCommand(act, extra) {
         const command = ['blissmixerext', 'survey', 'act:' + act];
@@ -63,6 +65,9 @@
             headers: {'Content-Type': 'application/json', 'Origin': window.location.hostname},
             body: JSON.stringify({id: 1, method: 'slim.request', params: ['', command]})
         });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         return response.json();
     }
 
@@ -99,27 +104,107 @@
     }
 
     async function backupNow() {
-        const target = document.getElementById('backup-status');
-        const response = await extCommand('backup');
-        target.textContent = response.result && response.result.ok
-            ? '[% backup_success_text %]'
-            : '[% backup_failed_text %]';
+        const backupPath = document.getElementById('triplets_backup_path');
+        if (!backupPath || !(backupPath.value || '').trim()) {
+            updateBackupButtonState();
+            return;
+        }
+        const target = document.getElementById('backup-now-status');
+        try {
+            const response = await extCommand('backup');
+            target.textContent = response.result && response.result.ok
+                ? '[% backup_success_text %]'
+                : (response.result && response.result.msg
+                    ? response.result.msg
+                    : '[% backup_failed_text %]');
+        } catch (error) {
+            target.textContent = '[% backup_failed_text %]';
+        }
+        setTimeout(() => { if (target) target.textContent = ''; }, 4000);
+    }
+
+    function updateBackupButtonState() {
+        const backupPath = document.getElementById('triplets_backup_path');
+        const backupButton = document.getElementById('backup-now-btn');
+        if (backupPath && backupButton) {
+            backupButton.disabled = !(backupPath.value || '').trim();
+        }
     }
 
     async function restoreBackup() {
-        const path = document.getElementById('restore_path').value.trim();
+        if (restoreIsRunning) return;
+        const pathInput = document.getElementById('restore_backup_path');
+        const path = (pathInput ? pathInput.value : '').trim();
         if (!path) return;
+        if (path.endsWith('/') || path.endsWith('\\')) return;
+        restoreIsRunning = true;
+        restoreLastSeenPath = path;
+        if (pathInput) pathInput.disabled = true;
         const target = document.getElementById('restore-status');
         target.textContent = '[% restore_in_progress_text %]';
-        const response = await extCommand('restore-backup', 'path:' + path);
-        target.textContent = response.result && response.result.ok
-            ? '[% restore_success_text %]'
-            : '[% restore_failed_text %]';
-        await refreshLearning();
+        try {
+            const response = await extCommand('restore-backup', 'path:' + path);
+            if (response.result && response.result.ok) {
+                target.textContent = '[% restore_success_text %]';
+                await refreshLearning();
+            } else {
+                target.textContent = response.result && response.result.msg
+                    ? response.result.msg
+                    : '[% restore_failed_text %]';
+            }
+        } catch (error) {
+            target.textContent = '[% restore_failed_text %]';
+        } finally {
+            restoreIsRunning = false;
+            setRestorePathFromBackupFolder();
+            if (pathInput) pathInput.disabled = false;
+        }
     }
 
-    if (document.getElementById('learning-button')) {
-        refreshLearning();
-        setInterval(refreshLearning, 3000);
+    function ensurePathEndsWithSeparator(path) {
+        if (!path || path.endsWith('/') || path.endsWith('\\')) return path;
+        return path.indexOf('\\') >= 0 && path.indexOf('/') < 0 ? path + '\\' : path + '/';
     }
+
+    function watchRestorePathSelection() {
+        if (restoreIsRunning) return;
+        const pathInput = document.getElementById('restore_backup_path');
+        if (!pathInput) return;
+        const path = (pathInput.value || '').trim();
+        if (!path || path.endsWith('/') || path.endsWith('\\')) return;
+        if (path !== restoreLastSeenPath) restoreBackup();
+    }
+
+    function setRestorePathFromBackupFolder() {
+        const backupPath = document.getElementById('triplets_backup_path');
+        const restorePath = document.getElementById('restore_backup_path');
+        if (backupPath && restorePath && backupPath.value) {
+            restorePath.value = ensurePathEndsWithSeparator(backupPath.value);
+            restoreLastSeenPath = restorePath.value.trim();
+        }
+    }
+
+    window.addEventListener('load', () => {
+        if (document.getElementById('learning-button')) {
+            refreshLearning();
+            setInterval(refreshLearning, 3000);
+        }
+        updateBackupButtonState();
+        setRestorePathFromBackupFolder();
+        const backupPath = document.getElementById('triplets_backup_path');
+        if (backupPath) {
+            backupPath.addEventListener('change', updateBackupButtonState);
+            backupPath.addEventListener('input', updateBackupButtonState);
+        }
+        const restorePath = document.getElementById('restore_backup_path');
+        if (restorePath) {
+            restorePath.addEventListener('change', restoreBackup);
+            restorePath.addEventListener('input', restoreBackup);
+        }
+        restoreWatchInterval = setInterval(watchRestorePathSelection, 250);
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (restoreWatchInterval) clearInterval(restoreWatchInterval);
+    });
 </script>

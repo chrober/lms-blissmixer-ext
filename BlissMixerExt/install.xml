@@ -5,7 +5,7 @@
     <icon>plugins/BlissMixerExt/html/images/blissmixerext.png</icon>
     <name>BLISSMIXEREXT</name>
     <module>Plugins::BlissMixerExt::Plugin</module>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
     <description>BLISSMIXEREXT_DESC</description>
     <creator>Christoph O'Bermair</creator>
     <defaultState>

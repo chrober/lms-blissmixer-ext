@@ -53,6 +53,7 @@ sub beforeRender {
     $paramRef->{restore_in_progress_text} = string('BLISSMIXEREXT_RESTORE_IN_PROGRESS');
     $paramRef->{restore_success_text} = string('BLISSMIXEREXT_RESTORE_SUCCESS');
     $paramRef->{restore_failed_text} = string('BLISSMIXEREXT_RESTORE_FAILED');
+    $paramRef->{backup_now_text} = string('BLISSMIXEREXT_BACKUP_NOW');
     $paramRef->{backup_success_text} = string('BLISSMIXEREXT_BACKUP_SUCCESS');
     $paramRef->{backup_failed_text} = string('BLISSMIXEREXT_BACKUP_FAILED');
 }
