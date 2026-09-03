@@ -4,6 +4,9 @@ BLISSMIXEREXT
 BLISSMIXEREXT_DESC
 	EN	Experimental and early-access extensions for Bliss Mixer
 
+DEBUG_PLUGIN_BLISSMIXEREXT
+	EN	Bliss Mixer Extensions
+
 BLISSMIXEREXT_DSTM
 	EN	Bliss (Ext)
 
