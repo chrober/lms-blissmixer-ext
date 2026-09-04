@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3 - 2026-09-04
+
+- Bundle bliss-mixer 0.10.1, built against bliss-mixer-core revision
+  `a605edc2b61b525bd75bb3d350fd4b41235cf5d6`.
+
 ## 0.4.2 - 2026-09-04
 
 - Place the three Ext track context actions, in their established order,
