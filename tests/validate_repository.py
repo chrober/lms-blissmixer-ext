@@ -45,6 +45,10 @@ required = {
     "Ext mix context action": "BLISSMIXEREXT_CREATE_MIX",
     "Ext similar-tracks context action": "BLISSMIXEREXT_SIMILAR_TRACKS",
     "adaptive similar-track request": "adaptiveweights => int($prefs->get('use_adaptive_weights') || 0)",
+    "interactive action logging": "User action: $action",
+    "interactive strategy logging": "Effective strategy: $strategy",
+    "interactive result logging": "returned by bliss-mixer-ext",
+    "interactive timing diagnostics": "Interactive Ext request timing:",
 }
 for description, needle in required.items():
     if needle not in plugin_source + survey_source + lastfm_track_source:

@@ -28,6 +28,12 @@ adaptive weighting is selected; static weighting uses the configured metric
 sliders. Extended isolation forest cannot be trained from a single similarity
 seed, so that case falls back to static weighting.
 
+At INFO log level these actions report their effective strategy, filters,
+seeds, result counts, and selected tracks. DEBUG additionally reports paths,
+request payloads, raw responses, and request timing. Result menus deliberately
+retain Bliss Mixer's synthetic first **Play this mix** row, which loads all
+returned tracks at once and is not itself a track result.
+
 BlissMixerExt currently requires Bliss Mixer 0.10.0 or newer and LMS 9.0 or
 newer.
 

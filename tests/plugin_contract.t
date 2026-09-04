@@ -168,6 +168,10 @@ BEGIN {
     sub id { return $_[0]->{id} // 42 }
     sub path { return $_[0]->{path} // ('/music/' . $_[0]->{url}) }
     sub tracknum { return 0 }
+
+    package TestRequest;
+    sub new { return bless {params => $_[1] || {}}, $_[0] }
+    sub getParam { return $_[0]->{params}{$_[1]} }
 }
 
 use lib "$FindBin::Bin/..";
@@ -491,6 +495,57 @@ is($list_data->{byartist}, 1,
     'similarity request forwards the same-artist restriction');
 is($list_data->{filterxmas}, 1,
     'similarity request inherits the upstream Christmas filter');
+
+my $general_request = TestRequest->new({byArtist => 0});
+my $artist_request = TestRequest->new({byArtist => 1});
+is(
+    Plugins::BlissMixerExt::Plugin::_interactiveActionName(
+        $general_request, 'mix',
+    ),
+    'Create bliss mix (Ext)',
+    'interactive logging names the Ext mix action',
+);
+is(
+    Plugins::BlissMixerExt::Plugin::_interactiveActionName(
+        $general_request, 'list',
+    ),
+    'Similar tracks (Ext)',
+    'interactive logging names the general Ext similarity action',
+);
+is(
+    Plugins::BlissMixerExt::Plugin::_interactiveActionName(
+        $artist_request, 'list',
+    ),
+    'Similar tracks by artist (Ext)',
+    'interactive logging names the same-artist Ext similarity action',
+);
+
+$Plugins::BlissMixerExt::Survey::matrix_path = undef;
+my ($list_strategy, $list_uses_static) =
+    Plugins::BlissMixerExt::Plugin::_interactiveStrategy(
+        $artist_request, 'list', [$menu_track],
+    );
+like($list_strategy, qr/static weights.*same artist only.*no learned matrix/,
+    'similarity logging reports its effective static fallback accurately');
+is($list_uses_static, 1,
+    'static fallback is marked for configured-weight logging');
+
+my $strategy_matrix_dir = tempdir(CLEANUP => 1);
+my $strategy_matrix = File::Spec->catfile($strategy_matrix_dir, 'matrix.json');
+open my $strategy_matrix_fh, '>', $strategy_matrix
+    or die "Cannot create $strategy_matrix: $!";
+print {$strategy_matrix_fh} "{}\n";
+close $strategy_matrix_fh;
+$Plugins::BlissMixerExt::Survey::matrix_path = $strategy_matrix;
+($list_strategy, $list_uses_static) =
+    Plugins::BlissMixerExt::Plugin::_interactiveStrategy(
+        $general_request, 'list', [$menu_track],
+    );
+like($list_strategy, qr/learned matrix.*all artists.*single-seed/,
+    'similarity logging reports learned-matrix selection accurately');
+is($list_uses_static, 0,
+    'learned-matrix selection does not claim to use static weights');
+$Plugins::BlissMixerExt::Survey::matrix_path = undef;
 
 is(Plugins::BlissMixerExt::Plugin->title(), 'BlissMixerExt',
     'plugin identity remains distinct from upstream');

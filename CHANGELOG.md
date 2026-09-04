@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add INFO logs for all three Ext context actions, including the effective
+  strategy, filters, seeds, resolved results, and failures.
+- Add DEBUG logs for request parameters, seed/result paths, raw API responses,
+  and HTTP/result/total timing.
+
 ## 0.4.0 - 2026-09-04
 
 - Add distinct `Create bliss mix (Ext)` actions for track, album, and artist
