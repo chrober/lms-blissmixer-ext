@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 - 2026-09-04
 
 - Add INFO logs for all three Ext context actions, including the effective
   strategy, filters, seeds, resolved results, and failures.
