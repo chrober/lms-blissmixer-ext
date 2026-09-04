@@ -1,47 +1,69 @@
 # Bliss Mixer Extensions
 
-BlissMixerExt is an independent extension plugin providing experimental and
-early-access features for
-[Lyrion Media Server](https://lyrion.org/). It requires the upstream
-[Bliss Mixer](https://github.com/CDrummond/lms-blissmixer) plugin and adds a
-separate **Bliss (Ext)** provider to Don't Stop the Music.
+BlissMixerExt is an independent companion plugin for
+[Lyrion Media Server](https://lyrion.org/) and the upstream
+[Bliss Mixer](https://github.com/CDrummond/lms-blissmixer) plugin. It provides a
+temporary staging area where experimental and early-access extensions can be
+tested by interested users before they are proposed for inclusion in Bliss
+Mixer.
 
-BlissMixerExt does not replace or modify the installed Bliss Mixer plugin. It
-exists as a staging channel where early adopters can test features before they
-are proposed for upstream Bliss Mixer.
+BlissMixerExt is installed alongside Bliss Mixer and does not replace or modify
+it. Features may be added, changed, or removed as experiments evolve or move
+upstream.
+
+## Current features
+
+This list is intentionally ephemeral and describes what the staging plugin
+currently contributes:
+
+- A preference-learning survey and native learner that produce a learned
+  similarity matrix, including configurable matrix influence and training-data
+  backup and restore.
+- A separate **Bliss (Ext)** Don't Stop the Music provider that honors Bliss
+  Mixer's configured strategy and filters while applying the available
+  extensions.
+- Configurable play-count influence to favor either less-played or frequently
+  played tracks while retaining acoustic similarity as a ranking signal.
+- Optional Last.fm recording-similarity guidance in addition to Bliss Mixer's
+  artist endorsement, with MusicBrainz recording IDs preferred and normalized
+  artist/title matching as a fallback.
+- **Create bliss mix (Ext)** actions for tracks, albums, and artists, plus
+  **Similar tracks (Ext)** and **Similar tracks by artist (Ext)** actions. These
+  use the separate Ext mixer and respect the configured mixing strategy,
+  including adaptive weighting and the learned matrix.
+- Companion status information for the installed Bliss Mixer, its analysis
+  database, LMS listening statistics, and native learner availability.
 
 ## Responsibilities
 
 - Upstream Bliss Mixer analyses the music library and owns `bliss.db`.
 - BlissMixerExt reads that database and the upstream mix preferences.
-- BlissMixerExt owns its mixer and learner processes, experimental preferences,
-  survey data, and learned similarity matrix.
-- The standard **Bliss** and experimental **Bliss (Ext)** DSTM providers can be
-  installed and selected side by side.
-
-The track context menu also contains **Similar tracks (Ext)** and **Similar
-tracks by artist (Ext)**. Track, album, and artist menus contain **Create bliss
-mix (Ext)**. These entries use the separate Ext mixer and honor Bliss Mixer's
-configured strategy and filters. The mix action supports all configured
-strategies. A one-track similarity request uses the learned matrix when
-adaptive weighting is selected; static weighting uses the configured metric
-sliders. Extended isolation forest cannot be trained from a single similarity
-seed, so that case falls back to static weighting.
-
-At INFO log level these actions report their effective strategy, filters,
-seeds, result counts, and selected tracks. DEBUG additionally reports paths,
-request payloads, raw responses, and request timing. Result menus deliberately
-retain Bliss Mixer's synthetic first **Play this mix** row, which loads all
-returned tracks at once and is not itself a track result.
+- BlissMixerExt owns the runtime processes, preferences, and data needed by its
+  staged extensions.
+- The plugins remain separately registered and operate side by side.
 
 BlissMixerExt currently requires Bliss Mixer 0.10.0 or newer and LMS 9.0 or
 newer.
 
 ## Installation
 
-Release packages include platform-specific `bliss-mixer-ext` and
-`bliss-learner` executables. Install the appropriate release through the LMS
-plugin manager or extract it into the LMS plugins directory, then restart LMS.
+The recommended installation method is
+[chrober's LMS Plugin Repository](https://github.com/chrober/lms-plugins),
+where the current repository setup and installation instructions are
+maintained. Add its feed as an additional repository in Lyrion Media Server:
+
+```text
+https://raw.githubusercontent.com/chrober/lms-plugins/main/repo.xml
+```
+
+Then install **Bliss Mixer Extensions** through the LMS plugin manager and
+restart LMS. The repository selects the appropriate platform-specific package,
+including `bliss-mixer-ext` and `bliss-learner`, for the server.
+
+Enable both Bliss Mixer and Bliss Mixer Extensions. Run library analysis from
+the upstream Bliss Mixer settings, configure experimental options on the
+BlissMixerExt settings page, and select **Bliss (Ext)** under Don't Stop the
+Music.
 
 For development, place or symlink the `BlissMixerExt` directory in the LMS
 plugins directory and run:
@@ -49,34 +71,6 @@ plugins directory and run:
 ```text
 python download-binaries.py
 ```
-
-Enable both Bliss Mixer and Bliss Mixer Extensions. Run library analysis from
-the upstream Bliss Mixer settings, configure experimental options on the
-BlissMixerExt settings page, and select **Bliss (Ext)** under Don't Stop the
-Music.
-
-Metric learning reports its live start time, elapsed duration, and current
-native training phase on the settings page. The installed upstream BlissMixer
-version shown under Companion status is read from LMS's loaded plugin manifest.
-
-The experimental play-count influence can favor either less-played or
-frequently played tracks while preserving acoustic similarity as a ranking
-signal. It uses LMS's built-in listening statistics, which are enabled by
-default. If LMS was started with `--nostatistics`, remove that command-line
-option and restart the server; there is no corresponding web setting.
-
-When Adaptive weighting and Last.fm artist weighting are enabled in upstream
-BlissMixer, the optional similar-track guidance asks LastMix for recordings
-related to the current DSTM seeds. Recording MBIDs are preferred, with
-normalized artist/title matching as a fallback. Only candidates already
-returned by Bliss can be selected, and unavailable, partial, slow, or malformed
-Last.fm responses degrade to the evidence available at the deadline or to
-Bliss alone.
-
-INFO-level selection logs label Last.fm evidence in the centered first column:
-`(a)` means artist similarity, `(t)` means recording similarity, and `(a+t)`
-means both. Numeric support scores and calculated weights are available only at
-DEBUG level.
 
 ## Compatibility and isolation
 
