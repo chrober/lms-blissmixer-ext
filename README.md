@@ -20,19 +20,20 @@ currently contributes:
   similarity matrix, including configurable matrix influence and training-data
   backup and restore.
 - A separate **Bliss (Ext)** Don't Stop the Music provider that honors Bliss
-  Mixer's configured strategy and filters while applying the available
-  extensions.
-- Configurable play-count influence to favor either less-played or frequently
-  played tracks while retaining acoustic similarity as a ranking signal.
-- Optional Last.fm recording-similarity guidance in addition to Bliss Mixer's
-  artist endorsement, with MusicBrainz recording IDs preferred and normalized
-  artist/title matching as a fallback.
+  Mixer's configured strategy and filters. Depending on configuration, it
+  supports:
+
+  - Bliss Mixer's complete **Adaptive Weightings** strategy, including dynamic
+    acoustic weighting and optional Last.fm artist endorsement.
+  - Learned-matrix weighting with configurable influence.
+  - Play-count influence that can favor either less-played or frequently played
+    tracks while retaining acoustic similarity as a ranking signal.
+  - Last.fm recording-similarity guidance, with MusicBrainz recording IDs
+    preferred and normalized artist/title matching as a fallback.
 - **Create bliss mix (Ext)** actions for tracks, albums, and artists, plus
   **Similar tracks (Ext)** and **Similar tracks by artist (Ext)** actions. These
   use the separate Ext mixer and respect the configured mixing strategy,
   including adaptive weighting and the learned matrix.
-- Companion status information for the installed Bliss Mixer, its analysis
-  database, LMS listening statistics, and native learner availability.
 
 ## Responsibilities
 
