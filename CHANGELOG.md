@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-09-04
 
 - Add distinct `Create bliss mix (Ext)` actions for track, album, and artist
   context menus.
