@@ -114,17 +114,17 @@ sub initPlugin {
     Slim::Control::Request::addDispatch(['blissmixerext', '_cmd'], [0, 0, 1, \&_cliCommand]);
 
     Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextmix => (
-        above    => 'favorites',
+        after    => 'blisssimilaritybyartist',
         func     => \&trackInfoHandler,
     ) );
 
     Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextsimilarity => (
-        above    => 'favorites',
+        after    => 'blissmixerextmix',
         func     => \&similarTracksHandler,
     ) );
 
     Slim::Menu::TrackInfo->registerInfoProvider( blissmixerextsimilaritybyartist => (
-        above    => 'favorites',
+        after    => 'blissmixerextsimilarity',
         func     => \&similarTracksByArtistHandler,
     ) );
 

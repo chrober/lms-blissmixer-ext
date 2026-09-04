@@ -77,6 +77,19 @@ for forbidden in (
     if forbidden in plugin_source:
         fail(f"sidecar contains conflicting registration: {forbidden}")
 
+for provider, anchor in (
+    ("blissmixerextmix", "blisssimilaritybyartist"),
+    ("blissmixerextsimilarity", "blissmixerextmix"),
+    ("blissmixerextsimilaritybyartist", "blissmixerextsimilarity"),
+):
+    if not re.search(
+        rf"registerInfoProvider\( {provider} => \(\s*after\s*=>\s*'{anchor}'",
+        plugin_source,
+    ):
+        fail(f"context-menu provider {provider} must appear after {anchor}")
+if re.search(r"registerInfoProvider\( blissmixerext\w+ => \(\s*above\s*=>", plugin_source):
+    fail("TrackInfo placement must use Lyrion's after key, not ignored above")
+
 if 'blissmixer-triplets-${ts}.zip' not in survey_source:
     fail("training-data backups must retain the established BlissMixer filename")
 

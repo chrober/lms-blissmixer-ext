@@ -44,7 +44,7 @@
     ["blissmixerext", "blissmixer"]
   ],
   "intentional_adaptations": {
-    "initPlugin": "Registers uniquely named Ext context-menu providers and the independent blissmixerext command without registering upstream analyser, importer, or protocol components.",
+    "initPlugin": "Registers uniquely named Ext context-menu providers in a deterministic chain after the upstream providers, and registers the independent blissmixerext command without upstream analyser, importer, or protocol components.",
     "postinitPlugin": "Registers Bliss (Ext) independently and applies the upstream compatibility gate.",
     "_pathToTrack": "Carries the sidecar's Windows path existence fix until it is present upstream.",
     "_dstmMix": "Owns the sidecar process, defers database refreshes during upstream analysis, and adds learned-matrix selection, play-count reranking, Last.fm similar-track guidance, blend handling, and experimental diagnostics.",

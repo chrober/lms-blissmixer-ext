@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Place the three Ext track context actions, in their established order,
+  immediately after Bliss Mixer's three actions.
+
 ## 0.4.1 - 2026-09-04
 
 - Add INFO logs for all three Ext context actions, including the effective
